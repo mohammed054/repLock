@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FF6200EE</color>
+    <string name="app_name">RepLock</string>
+    <style name="Theme.RepLock"/>
+</resources>
