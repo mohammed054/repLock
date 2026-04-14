@@ -59,7 +59,8 @@ fun LockScreen(
     isUnlocked   : Boolean = false,
     repState     : String  = "WAITING",
     onStartStop  : () -> Unit = {},
-    onUnlock     : () -> Unit = {}
+    onUnlock    : () -> Unit = {},
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
 ) {
     val progress = (repCount.toFloat() / targetReps).coerceIn(0f, 1f)
 
@@ -142,7 +143,8 @@ fun LockScreen(
                     .fillMaxWidth()
                     .weight(1f),
                 isActive  = isActive,
-                repState  = repState
+                repState  = repState,
+                imageAnalysisUseCase = imageAnalysisUseCase
             )
 
             Spacer(modifier = Modifier.height(24.dp))

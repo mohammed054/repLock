@@ -53,7 +53,8 @@ fun ExerciseScreen(
     repState    : String  = "WAITING",
     elapsedSecs : Long    = 0L,
     onStop      : () -> Unit = {},
-    onBack      : () -> Unit = {}
+    onBack      : () -> Unit = {},
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
 ) {
     val progress = (repCount.toFloat() / targetReps).coerceIn(0f, 1f)
 
@@ -68,7 +69,8 @@ fun ExerciseScreen(
         CameraPreview(
             modifier = Modifier.fillMaxSize(),
             isActive = isActive,
-            repState = repState
+            repState = repState,
+            imageAnalysisUseCase = imageAnalysisUseCase
         )
 
         // ── Dimmed gradient overlay at bottom ───────────────────────

@@ -56,30 +56,37 @@ android {
 }
 
 dependencies {
-    // Jetpack Compose BOM (Bill of Materials) - Manages all Compose versions
+    // Jetpack Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.04.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
     // UI Framework (Compose)
+    implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // CameraX (Imaging)
+    // CameraX
     val cameraxVersion = "1.3.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")       // ← ImageAnalysis
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // Lifecycle & Coroutines (State Management & Async)
+    // ML Kit — Accurate Pose Detection (bundles model on-device; no network needed)
+    implementation("com.google.mlkit:pose-detection-accurate:18.0.0-beta3")
+
+    // Lifecycle & Coroutines
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Room (Local SQLite Database)
+    // Room
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")

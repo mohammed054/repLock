@@ -1,0 +1,83 @@
+package com.replock.app.presentation.exercise
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.replock.app.domain.usecase.CountPushUpUseCase
+import com.replock.app.ml.pose.PoseDetector
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+class ExerciseViewModel : ViewModel() {
+
+    private var _poseDetector: PoseDetector? = null
+    private val poseDetector: PoseDetector
+        get() {
+            if (_poseDetector == null) {
+                _poseDetector = PoseDetector()
+            }
+            return _poseDetector!!
+        }
+
+    private val countPushUpUseCase by lazy { CountPushUpUseCase(poseDetector) }
+
+    private val _repCount = MutableStateFlow(0)
+    val repCount: StateFlow<Int> = _repCount.asStateFlow()
+
+    private val _repState = MutableStateFlow("WAITING")
+    val repState: StateFlow<String> = _repState.asStateFlow()
+
+    private val _currentFrame = MutableStateFlow<LandmarkFrame?>(null)
+    val currentFrame: StateFlow<LandmarkFrame?> = _currentFrame.asStateFlow()
+
+    private val _elapsedSecs = MutableStateFlow(0L)
+    val elapsedSecs: StateFlow<Long> = _elapsedSecs.asStateFlow()
+
+    private var collectionJob: Job? = null
+    private var timerJob: Job? = null
+
+    val imageAnalysisUseCase: androidx.camera.core.ImageAnalysis
+        get() = poseDetector.imageAnalysisUseCase
+
+    fun startSession() {
+        // Ensure we have a fresh detector if the previous one was closed
+        val currentDetector = poseDetector 
+        countPushUpUseCase.reset()
+        _repCount.value = 0
+        _repState.value = "WAITING"
+        _elapsedSecs.value = 0
+        
+        collectionJob?.cancel()
+        collectionJob = viewModelScope.launch {
+            countPushUpUseCase.results.collect { result ->
+                _repCount.value = result.repCount
+                _repState.value = result.repState.label
+            }
+        }
+        
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                _elapsedSecs.value += 1
+            }
+        }
+    }
+
+    fun stopSession() {
+        collectionJob?.cancel()
+        timerJob?.cancel()
+        collectionJob = null
+        timerJob = null
+        _poseDetector?.close()
+        _poseDetector = null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopSession()
+    }
+}

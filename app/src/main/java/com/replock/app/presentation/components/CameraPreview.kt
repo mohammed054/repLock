@@ -43,7 +43,8 @@ private val TextMuted     = Color(0xFF5E5E78)
 fun CameraPreview(
     modifier: Modifier = Modifier,
     isActive: Boolean = false,
-    repState: String = "WAITING"
+    repState: String = "WAITING",
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "cam_anim")
 
@@ -74,7 +75,10 @@ fun CameraPreview(
     ) {
         // Camera feed or placeholder
         if (isActive) {
-            LiveCameraFeed(modifier = Modifier.fillMaxSize())
+            LiveCameraFeed(
+                modifier = Modifier.fillMaxSize(),
+                imageAnalysisUseCase = imageAnalysisUseCase
+            )
         } else {
             PlaceholderGrid(modifier = Modifier.fillMaxSize())
         }
@@ -192,22 +196,34 @@ fun CameraPreview(
 // ─── Private helpers ────────────────────────────────────────────────────────
 
 @Composable
-private fun LiveCameraFeed(modifier: Modifier) {
+private fun LiveCameraFeed(
+    modifier: Modifier,
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
+) {
     val context        = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView    = remember { PreviewView(context) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(imageAnalysisUseCase) {
         val provider = ProcessCameraProvider.getInstance(context).get()
         val preview  = Preview.Builder().build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
         provider.unbindAll()
-        provider.bindToLifecycle(
-            lifecycleOwner,
-            CameraSelector.DEFAULT_FRONT_CAMERA,
-            preview
-        )
+        if (imageAnalysisUseCase != null) {
+            provider.bindToLifecycle(
+                lifecycleOwner,
+                CameraSelector.DEFAULT_FRONT_CAMERA,
+                preview,
+                imageAnalysisUseCase
+            )
+        } else {
+            provider.bindToLifecycle(
+                lifecycleOwner,
+                CameraSelector.DEFAULT_FRONT_CAMERA,
+                preview
+            )
+        }
     }
 
     AndroidView(
