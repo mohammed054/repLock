@@ -13,12 +13,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.util.concurrent.Executors
 
-import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.receiveAsFlow
-import java.util.concurrent.Executors
-
 class PoseDetector {
 
     data class Result(

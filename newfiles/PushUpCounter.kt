@@ -4,140 +4,178 @@ import com.replock.app.domain.model.RepPhase
 import com.replock.app.domain.model.RepState
 import com.replock.app.ml.pose.Joint
 import com.replock.app.ml.pose.LandmarkFrame
+import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.sqrt
 
-/**
- * Counts push-up repetitions from a stream of [LandmarkFrame]s using
- * elbow-angle geometry.
- *
- * ## Algorithm
- * For each frame:
- * 1. Compute the elbow angle on each arm (angle at the elbow joint formed
- *    by the shoulder→elbow and wrist→elbow vectors).
- * 2. Average visible sides; prefer both arms when available for robustness.
- * 3. Classify the angle into a [RepPhase]:
- *    - `DOWN`       → angle < [DOWN_ANGLE_DEG] (~80°)  — low position
- *    - `UP`         → angle > [UP_ANGLE_DEG]   (~155°) — arms extended
- *    - `TRANSITION` → angle in between
- * 4. Count a rep on the **DOWN → UP** transition (concentric phase complete).
- *
- * A rep is only counted once per descent, preventing double-counts for
- * noisy frames near the threshold.
- */
 class PushUpCounter {
 
-    // ── Thresholds ────────────────────────────────────────────────────────────
     companion object {
-        /** Elbow angle (degrees) at or below which we classify as DOWN. */
-        const val DOWN_ANGLE_DEG = 80f
+        // Elbow angle thresholds
+        private const val DOWN_THRESHOLD = 90f   // ≤ this  → bottom of push-up
+        private const val UP_THRESHOLD   = 150f  // ≥ this  → arms extended (was 160 — too strict)
 
-        /** Elbow angle (degrees) at or above which we classify as UP. */
-        const val UP_ANGLE_DEG  = 155f
+        // Body-straight validation
+        private const val BODY_MIN_ANGLE = 150.0 // hip–knee–ankle angle
+
+        // EMA smoothing: lower α = smoother signal, higher = more responsive
+        // 0.25 kills per-frame jitter while staying <2 frames behind the real angle
+        private const val EMA_ALPHA = 0.25f
+
+        // Minimum ms between phase transitions — prevents noise double-counting
+        private const val DEBOUNCE_MS = 350L
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
+    //
+    // currentPhase        — where we are right now (UP / TRANSITION / DOWN)
+    // lastDefinitivePhase — last time we were *actually* at an extreme (UP or DOWN)
+    //
+    // The rep count fires when currentPhase transitions into UP and
+    // lastDefinitivePhase was DOWN.  TRANSITION never blocks this — it is just
+    // a passthrough zone.  Previously the code did:
+    //
+    //   if (currentPhase == DOWN && newPhase == UP) repCount++
+    //
+    // which required jumping from DOWN straight to UP in a single frame.
+    // That's essentially impossible: every real push-up passes through TRANSITION
+    // on the way up, so the counter was permanently stuck at 0.
+    //
+    private var currentPhase        = RepPhase.UP
+    private var lastDefinitivePhase = RepPhase.UP
+    private var lastPhaseChangeTime = 0L
+    private var smoothedAngle: Float? = null
 
-    private var currentPhase = RepPhase.UP   // assume starting position is UP
-
-    /** Total rep count for the current session. */
     var repCount = 0
         private set
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Feed a landmark frame and receive the updated [RepState].
-     *
-     * Returns the **previous** state wrapped in [RepState] if no valid elbow
-     * angles can be computed (e.g. the person is off-screen).
-     */
-    fun process(frame: LandmarkFrame): RepState {
-        val angleDeg = bestElbowAngle(frame)
-            ?: return RepState(currentPhase, confidence = 0f)
+    data class Analysis(
+        val state: RepState,
+        val isFormValid: Boolean,
+        val feedback: String
+    )
 
-        val newPhase = classifyAngle(angleDeg)
+    fun process(frame: LandmarkFrame): Analysis {
+        val rawAngle  = bestElbowAngle(frame)
+        val isStraight = isBodyStraight(frame)
 
-        // ── Rep counting state machine ──────────────────────────────────────
-        if (currentPhase == RepPhase.DOWN && newPhase == RepPhase.UP) {
-            repCount++
+        // EMA smoothing — stabilises jittery MLKit landmark outputs
+        if (rawAngle != null) {
+            smoothedAngle = smoothedAngle
+                ?.let { prev -> prev + EMA_ALPHA * (rawAngle - prev) }
+                ?: rawAngle
         }
-        currentPhase = newPhase
 
-        return RepState(
-            phase      = newPhase,
-            confidence = computeConfidence(newPhase, angleDeg)
+        val angle = smoothedAngle
+        val now   = System.currentTimeMillis()
+
+        if (angle != null && (now - lastPhaseChangeTime) > DEBOUNCE_MS) {
+            val newPhase = classifyAngle(angle)
+            if (newPhase != currentPhase) {
+                // Count when we return to UP after a confirmed DOWN
+                if (newPhase == RepPhase.UP && lastDefinitivePhase == RepPhase.DOWN) {
+                    repCount++
+                }
+                // Only anchor the "last definitive" on actual extremes, not mid-range
+                if (newPhase != RepPhase.TRANSITION) {
+                    lastDefinitivePhase = newPhase
+                }
+                currentPhase        = newPhase
+                lastPhaseChangeTime = now
+            }
+        }
+
+        val isFormValid = angle != null && isStraight
+        val feedback    = buildFeedback(angle, isStraight, currentPhase, lastDefinitivePhase)
+
+        return Analysis(
+            state = RepState(
+                phase      = currentPhase,
+                confidence = if (angle != null) confidence(currentPhase, angle) else 0f
+            ),
+            isFormValid = isFormValid,
+            feedback    = feedback
         )
     }
 
-    /** Reset counter and state (call at session start / stop). */
     fun reset() {
-        repCount     = 0
-        currentPhase = RepPhase.UP
+        repCount            = 0
+        currentPhase        = RepPhase.UP
+        lastDefinitivePhase = RepPhase.UP
+        smoothedAngle       = null
+        lastPhaseChangeTime = 0L
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private fun classifyAngle(angleDeg: Float): RepPhase = when {
-        angleDeg <= DOWN_ANGLE_DEG -> RepPhase.DOWN
-        angleDeg >= UP_ANGLE_DEG   -> RepPhase.UP
-        else                       -> RepPhase.TRANSITION
+    private fun classifyAngle(deg: Float): RepPhase = when {
+        deg <= DOWN_THRESHOLD -> RepPhase.DOWN
+        deg >= UP_THRESHOLD   -> RepPhase.UP
+        else                  -> RepPhase.TRANSITION
     }
 
-    /**
-     * How strongly the angle is at each phase's extreme (0 = boundary, 1 = deep).
-     * Used for UI feedback (e.g. progress rings or colour intensity).
-     */
-    private fun computeConfidence(phase: RepPhase, angleDeg: Float): Float = when (phase) {
-        RepPhase.DOWN       -> ((DOWN_ANGLE_DEG - angleDeg) / DOWN_ANGLE_DEG).coerceIn(0f, 1f)
-        RepPhase.UP         -> ((angleDeg - UP_ANGLE_DEG) / (180f - UP_ANGLE_DEG)).coerceIn(0f, 1f)
-        RepPhase.TRANSITION -> 0f
+    private fun buildFeedback(
+        angle: Float?,
+        isStraight: Boolean,
+        phase: RepPhase,
+        lastDefinitive: RepPhase
+    ): String = when {
+        angle == null                                       -> "ADJUST CAMERA"
+        !isStraight                                         -> "KEEP BACK STRAIGHT"
+        phase == RepPhase.UP && lastDefinitive == RepPhase.UP -> "LOWER YOURSELF"
+        phase == RepPhase.DOWN                              -> "PUSH UP"
+        else                                                -> "KEEP GOING"
     }
 
-    /**
-     * Returns the averaged elbow angle across all visible arms.
-     * Averaging left and right reduces asymmetry noise.
-     */
-    private fun bestElbowAngle(frame: LandmarkFrame): Float? {
-        val leftAngle  = elbowAngle(frame.leftShoulder,  frame.leftElbow,  frame.leftWrist)
-        val rightAngle = elbowAngle(frame.rightShoulder, frame.rightElbow, frame.rightWrist)
-        return when {
-            leftAngle != null && rightAngle != null -> (leftAngle + rightAngle) / 2f
-            leftAngle  != null                      -> leftAngle
-            rightAngle != null                      -> rightAngle
-            else                                    -> null
+    private fun confidence(phase: RepPhase, deg: Float): Float = when (phase) {
+        RepPhase.DOWN       -> ((DOWN_THRESHOLD - deg) / DOWN_THRESHOLD).coerceIn(0f, 1f)
+        RepPhase.UP         -> ((deg - UP_THRESHOLD) / (180f - UP_THRESHOLD)).coerceIn(0f, 1f)
+        RepPhase.TRANSITION -> {
+            val mid = (DOWN_THRESHOLD + UP_THRESHOLD) / 2f
+            (1f - abs(deg - mid) / (mid - DOWN_THRESHOLD)).coerceIn(0f, 1f)
         }
     }
 
     /**
-     * Computes the angle (in degrees) at [elbow] formed by the
-     * [shoulder]–[elbow]–[wrist] joint triplet using the dot-product formula.
-     *
-     * Only uses x/y image-plane coordinates; z depth from ML Kit is less
-     * reliable on standard front cameras so we deliberately ignore it.
-     *
-     * Returns `null` if any joint is missing or the vectors have zero length.
+     * Prefer whichever side has all three joints visible; average both sides when
+     * both are detected.  This prevents a partially-occluded limb from corrupting
+     * the reading.
      */
-    private fun elbowAngle(shoulder: Joint?, elbow: Joint?, wrist: Joint?): Float? {
-        if (shoulder == null || elbow == null || wrist == null) return null
+    private fun bestElbowAngle(frame: LandmarkFrame): Float? {
+        val left  = calculateAngle(frame.leftShoulder,  frame.leftElbow,  frame.leftWrist)
+        val right = calculateAngle(frame.rightShoulder, frame.rightElbow, frame.rightWrist)
+        return when {
+            left != null && right != null -> (left + right) / 2f
+            left  != null                 -> left
+            right != null                 -> right
+            else                          -> null
+        }
+    }
 
-        // Vector from elbow to shoulder
-        val v1x = shoulder.x - elbow.x
-        val v1y = shoulder.y - elbow.y
+    /**
+     * Falls back from ankle to knee when the ankle is off-camera (common in
+     * push-up setups).  Returns true (form OK) when hips aren't visible at all —
+     * we can't penalise what we can't see.
+     */
+    private fun isBodyStraight(frame: LandmarkFrame): Boolean {
+        val left  = calculateAngle(frame.leftShoulder,  frame.leftHip,  frame.leftAnkle)
+                 ?: calculateAngle(frame.leftShoulder,  frame.leftHip,  frame.leftKnee)
+        val right = calculateAngle(frame.rightShoulder, frame.rightHip, frame.rightAnkle)
+                 ?: calculateAngle(frame.rightShoulder, frame.rightHip, frame.rightKnee)
+        val samples = listOfNotNull(left, right)
+        return samples.isEmpty() || samples.average() >= BODY_MIN_ANGLE
+    }
 
-        // Vector from elbow to wrist
-        val v2x = wrist.x - elbow.x
-        val v2y = wrist.y - elbow.y
-
-        val mag1 = sqrt(v1x * v1x + v1y * v1y)
-        val mag2 = sqrt(v2x * v2x + v2y * v2y)
-
-        // Guard against zero-length vectors (landmark jitter / same position)
-        if (mag1 < 1e-6f || mag2 < 1e-6f) return null
-
-        val cosAngle = ((v1x * v2x + v1y * v2y) / (mag1 * mag2))
-            .coerceIn(-1.0, 1.0)   // clamp for floating-point safety
-
-        return Math.toDegrees(acos(cosAngle)).toFloat()
+    private fun calculateAngle(a: Joint?, b: Joint?, c: Joint?): Float? {
+        if (a == null || b == null || c == null) return null
+        val v1x = a.x - b.x;  val v1y = a.y - b.y
+        val v2x = c.x - b.x;  val v2y = c.y - b.y
+        val m1  = sqrt(v1x * v1x + v1y * v1y)
+        val m2  = sqrt(v2x * v2x + v2y * v2y)
+        if (m1 < 1e-6f || m2 < 1e-6f) return null
+        val cos = ((v1x * v2x + v1y * v2y) / (m1 * m2)).toDouble().coerceIn(-1.0, 1.0)
+        return Math.toDegrees(acos(cos)).toFloat()
     }
 }
