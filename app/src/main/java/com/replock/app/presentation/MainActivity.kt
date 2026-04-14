@@ -25,6 +25,9 @@ class MainActivity : ComponentActivity() {
             val repCount by viewModel.repCount.collectAsStateWithLifecycle()
             val repState by viewModel.repState.collectAsStateWithLifecycle()
             val elapsedSecs by viewModel.elapsedSecs.collectAsStateWithLifecycle()
+            val currentFrame by viewModel.currentFrame.collectAsStateWithLifecycle()
+            val isFormValid by viewModel.isFormValid.collectAsStateWithLifecycle()
+            val feedback by viewModel.feedback.collectAsStateWithLifecycle()
             
             val context = LocalContext.current
             var hasCameraPermission by remember {
@@ -53,9 +56,13 @@ class MainActivity : ComponentActivity() {
             LockScreen(
                 repCount             = repCount,
                 targetReps         = targetReps,
+                elapsedSecs        = elapsedSecs,
                 isActive           = isActive && hasCameraPermission,
                 isUnlocked         = repCount >= targetReps,
                 repState           = repState,
+                currentFrame       = currentFrame,
+                isFormValid        = isFormValid,
+                feedback           = feedback,
                 imageAnalysisUseCase = if (isActive && hasCameraPermission) viewModel.imageAnalysisUseCase else null,
                 onStartStop = {
                     if (isActive) {
@@ -69,6 +76,10 @@ class MainActivity : ComponentActivity() {
                             launcher.launch(Manifest.permission.CAMERA)
                         }
                     }
+                },
+                onQuit = {
+                    viewModel.stopSession()
+                    isActive = false
                 },
                 onUnlock   = { /* OverlayController.dismiss() */ }
             )

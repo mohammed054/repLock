@@ -10,28 +10,57 @@ import kotlin.math.sqrt
 class PushUpCounter {
 
     companion object {
-        const val DOWN_ANGLE_DEG = 80f
-        const val UP_ANGLE_DEG  = 155f
+        const val DOWN_ANGLE_DEG = 85f   // More relaxed down angle
+        const val UP_ANGLE_DEG  = 160f   // More strict up angle
+        const val MIN_STRAIGHT_ANGLE = 155f // Better form validation
     }
 
     private var currentPhase = RepPhase.UP
+    private var lastPhaseChangeTime = 0L
+    private val debounceMs = 300L
+
     var repCount = 0
         private set
 
-    fun process(frame: LandmarkFrame): RepState {
-        val angleDeg = bestElbowAngle(frame)
-            ?: return RepState(currentPhase, confidence = 0f)
+    data class Analysis(
+        val state: RepState,
+        val isFormValid: Boolean,
+        val feedback: String
+    )
 
-        val newPhase = classifyAngle(angleDeg)
-
-        if (currentPhase == RepPhase.DOWN && newPhase == RepPhase.UP) {
-            repCount++
+    fun process(frame: LandmarkFrame): Analysis {
+        val elbowAngle = bestElbowAngle(frame)
+        val isStraight = isBodyStraight(frame)
+        
+        val isFormValid = elbowAngle != null && isStraight
+        val feedback = when {
+            elbowAngle == null -> "ADJUST CAMERA"
+            !isStraight -> "KEEP BACK STRAIGHT"
+            currentPhase == RepPhase.UP && elbowAngle > (UP_ANGLE_DEG - 10f) -> "GO DOWN"
+            currentPhase == RepPhase.DOWN && elbowAngle < (DOWN_ANGLE_DEG + 10f) -> "PUSH UP"
+            else -> "GOOD FORM"
         }
-        currentPhase = newPhase
 
-        return RepState(
-            phase      = newPhase,
-            confidence = computeConfidence(newPhase, angleDeg)
+        if (elbowAngle != null) {
+            val newPhase = classifyAngle(elbowAngle)
+            val now = System.currentTimeMillis()
+            
+            if (newPhase != currentPhase && (now - lastPhaseChangeTime) > debounceMs) {
+                if (currentPhase == RepPhase.DOWN && newPhase == RepPhase.UP) {
+                    repCount++
+                }
+                currentPhase = newPhase
+                lastPhaseChangeTime = now
+            }
+        }
+
+        return Analysis(
+            state = RepState(
+                phase = currentPhase,
+                confidence = if (elbowAngle != null) computeConfidence(currentPhase, elbowAngle) else 0f
+            ),
+            isFormValid = isFormValid,
+            feedback = feedback
         )
     }
 
@@ -56,9 +85,6 @@ class PushUpCounter {
         val leftAngle  = calculateAngle(frame.leftShoulder,  frame.leftElbow,  frame.leftWrist)
         val rightAngle = calculateAngle(frame.rightShoulder, frame.rightElbow, frame.rightWrist)
         
-        // Also ensure the body is relatively straight for a "full" pushup detection
-        if (!isBodyStraight(frame)) return null
-
         return when {
             leftAngle != null && rightAngle != null -> (leftAngle + rightAngle) / 2f
             leftAngle  != null                      -> leftAngle

@@ -5,6 +5,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.replock.app.ml.pose.Joint
+import com.replock.app.ml.pose.LandmarkFrame
 
 // ─── Design tokens ─────────────────────────────────────────────────────────
 private val BgSurface     = Color(0xFF0F0F18)
@@ -44,7 +47,10 @@ fun CameraPreview(
     modifier: Modifier = Modifier,
     isActive: Boolean = false,
     repState: String = "WAITING",
-    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null,
+    currentFrame: LandmarkFrame? = null,
+    isFormValid: Boolean = false,
+    feedback: String = ""
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "cam_anim")
 
@@ -189,6 +195,89 @@ fun CameraPreview(
                     letterSpacing = 1.sp
                 )
             }
+        }
+
+        // ── Skeleton Overlay ──────────────────────────────────────
+        if (isActive && currentFrame != null) {
+            SkeletonOverlay(
+                modifier = Modifier.fillMaxSize(),
+                frame    = currentFrame,
+                isFormValid = isFormValid
+            )
+        }
+
+        // ── Feedback Banner ───────────────────────────────────────
+        if (isActive && feedback.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 60.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isFormValid) AccentGreen.copy(alpha = 0.9f) else Color.Black.copy(alpha = 0.7f))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = feedback,
+                    color = if (isFormValid) Color.Black else Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonOverlay(
+    modifier: Modifier,
+    frame: LandmarkFrame,
+    isFormValid: Boolean
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val color = if (isFormValid) AccentGreen else AccentCyan
+        
+        fun drawBone(j1: Joint?, j2: Joint?) {
+            if (j1 == null || j2 == null) return
+            
+            drawLine(
+                color = color,
+                start = Offset(j1.x * size.width, j1.y * size.height),
+                end   = Offset(j2.x * size.width, j2.y * size.height),
+                strokeWidth = 6f,
+                cap = StrokeCap.Round
+            )
+        }
+
+        // Arms
+        drawBone(frame.leftShoulder, frame.leftElbow)
+        drawBone(frame.leftElbow, frame.leftWrist)
+        drawBone(frame.rightShoulder, frame.rightElbow)
+        drawBone(frame.rightElbow, frame.rightWrist)
+
+        // Torso
+        drawBone(frame.leftShoulder, frame.rightShoulder)
+        drawBone(frame.leftShoulder, frame.leftHip)
+        drawBone(frame.rightShoulder, frame.rightHip)
+        drawBone(frame.leftHip, frame.rightHip)
+
+        // Legs
+        drawBone(frame.leftHip, frame.leftKnee)
+        drawBone(frame.leftKnee, frame.leftAnkle)
+        drawBone(frame.rightHip, frame.rightKnee)
+        drawBone(frame.rightKnee, frame.rightAnkle)
+        
+        // Draw joints
+        val joints = listOfNotNull(
+            frame.leftShoulder, frame.rightShoulder,
+            frame.leftElbow, frame.rightElbow,
+            frame.leftWrist, frame.rightWrist,
+            frame.leftHip, frame.rightHip,
+            frame.leftKnee, frame.rightKnee,
+            frame.leftAnkle, frame.rightAnkle
+        )
+        
+        joints.forEach { j ->
+            drawCircle(color, radius = 8f, center = Offset(j.x * size.width, j.y * size.height))
         }
     }
 }

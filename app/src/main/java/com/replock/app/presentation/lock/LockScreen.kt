@@ -21,9 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.presentation.components.CameraPreview
 import com.replock.app.presentation.components.RepCounterUI
 import kotlinx.coroutines.delay
+import java.util.Locale
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -55,12 +57,17 @@ private val ColorTextMuted    = Color(0xFF5E5E78)
 fun LockScreen(
     repCount     : Int     = 0,
     targetReps   : Int     = 20,
+    elapsedSecs  : Long    = 0,
     isActive     : Boolean = false,
     isUnlocked   : Boolean = false,
     repState     : String  = "WAITING",
     onStartStop  : () -> Unit = {},
+    onQuit       : () -> Unit = {},
     onUnlock    : () -> Unit = {},
-    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null,
+    currentFrame : LandmarkFrame? = null,
+    isFormValid  : Boolean = false,
+    feedback     : String = ""
 ) {
     val progress = (repCount.toFloat() / targetReps).coerceIn(0f, 1f)
 
@@ -144,7 +151,10 @@ fun LockScreen(
                     .weight(1f),
                 isActive  = isActive,
                 repState  = repState,
-                imageAnalysisUseCase = imageAnalysisUseCase
+                imageAnalysisUseCase = imageAnalysisUseCase,
+                currentFrame = currentFrame,
+                isFormValid  = isFormValid,
+                feedback     = feedback
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -170,7 +180,24 @@ fun LockScreen(
                 onStartStop = onStartStop
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (isActive || repCount > 0) {
+                TextButton(
+                    onClick = onQuit,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text          = "QUIT SESSION",
+                        color         = ColorTextMuted,
+                        fontSize      = 12.sp,
+                        fontWeight    = FontWeight.W600,
+                        letterSpacing = 1.sp
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(20.dp))
+            }
         }
 
         // ── Unlock overlay (slides in over everything) ──────────────
@@ -179,7 +206,11 @@ fun LockScreen(
             enter   = fadeIn(tween(400)) + scaleIn(tween(400, easing = FastOutSlowInEasing), initialScale = 0.92f),
             exit    = fadeOut(tween(300))
         ) {
-            UnlockOverlay(onUnlock = onUnlock)
+            UnlockOverlay(
+                repCount = repCount,
+                elapsedSecs = elapsedSecs,
+                onUnlock = onUnlock
+            )
         }
     }
 }
@@ -326,7 +357,11 @@ private fun StartButton(
 // ─── Unlock overlay ─────────────────────────────────────────────────────────
 
 @Composable
-private fun UnlockOverlay(onUnlock: () -> Unit) {
+private fun UnlockOverlay(
+    repCount: Int,
+    elapsedSecs: Long,
+    onUnlock: () -> Unit
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "unlock_glow")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue  = 0.2f,
@@ -337,6 +372,10 @@ private fun UnlockOverlay(onUnlock: () -> Unit) {
         ),
         label = "pulseAlpha"
     )
+
+    val minutes = elapsedSecs / 60
+    val seconds = elapsedSecs % 60
+    val timeFormatted = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
 
     Box(
         modifier         = Modifier
@@ -393,7 +432,7 @@ private fun UnlockOverlay(onUnlock: () -> Unit) {
                 letterSpacing = 0.3.sp
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Rep summary pill
             Row(
@@ -404,14 +443,14 @@ private fun UnlockOverlay(onUnlock: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text      = "20",
+                    text      = repCount.toString(),
                     color     = ColorAccentGreen,
                     fontSize  = 18.sp,
                     fontWeight = FontWeight.W800
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text          = "PUSH-UPS  ·  COMPLETE",
+                    text          = "REPS  ·  $timeFormatted",
                     color         = ColorTextMuted,
                     fontSize      = 10.sp,
                     fontWeight    = FontWeight.W600,

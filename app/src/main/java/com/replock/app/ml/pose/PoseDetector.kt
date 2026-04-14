@@ -13,7 +13,19 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.util.concurrent.Executors
 
+import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
+import java.util.concurrent.Executors
+
 class PoseDetector {
+
+    data class Result(
+        val pose: Pose,
+        val width: Int,
+        val height: Int
+    )
 
     private val mlKitOptions: AccuratePoseDetectorOptions =
         AccuratePoseDetectorOptions.Builder()
@@ -25,7 +37,7 @@ class PoseDetector {
 
     private val analysisExecutor = Executors.newSingleThreadExecutor()
 
-    private val poseChannel = Channel<Pose>(Channel.CONFLATED)
+    private val poseChannel = Channel<Result>(Channel.CONFLATED)
 
     val imageAnalysisUseCase: ImageAnalysis =
         ImageAnalysis.Builder()
@@ -35,7 +47,7 @@ class PoseDetector {
                 analysis.setAnalyzer(analysisExecutor, ::analyzeImage)
             }
 
-    val poseFlow: Flow<Pose> = poseChannel.receiveAsFlow()
+    val poseFlow: Flow<Result> = poseChannel.receiveAsFlow()
 
     fun close() {
         imageAnalysisUseCase.clearAnalyzer()
@@ -52,15 +64,19 @@ class PoseDetector {
             return
         }
 
+        val rotation = proxy.imageInfo.rotationDegrees
+        val width = if (rotation == 90 || rotation == 270) proxy.height else proxy.width
+        val height = if (rotation == 90 || rotation == 270) proxy.width else proxy.height
+
         val inputImage = InputImage.fromMediaImage(
             mediaImage,
-            proxy.imageInfo.rotationDegrees
+            rotation
         )
 
         mlKitDetector.process(inputImage)
             .addOnSuccessListener { pose ->
                 if (pose.allPoseLandmarks.isNotEmpty()) {
-                    poseChannel.trySend(pose)
+                    poseChannel.trySend(Result(pose, width, height))
                 }
             }
             .addOnCompleteListener {

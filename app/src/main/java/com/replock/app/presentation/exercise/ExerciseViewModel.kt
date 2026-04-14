@@ -3,6 +3,7 @@ package com.replock.app.presentation.exercise
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.replock.app.domain.usecase.CountPushUpUseCase
+import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.ml.pose.PoseDetector
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,7 +23,7 @@ class ExerciseViewModel : ViewModel() {
             return _poseDetector!!
         }
 
-    private val countPushUpUseCase by lazy { CountPushUpUseCase(poseDetector) }
+    private val countPushUpUseCase by lazy { CountPushUpUseCase() }
 
     private val _repCount = MutableStateFlow(0)
     val repCount: StateFlow<Int> = _repCount.asStateFlow()
@@ -32,6 +33,12 @@ class ExerciseViewModel : ViewModel() {
 
     private val _currentFrame = MutableStateFlow<LandmarkFrame?>(null)
     val currentFrame: StateFlow<LandmarkFrame?> = _currentFrame.asStateFlow()
+
+    private val _isFormValid = MutableStateFlow(false)
+    val isFormValid: StateFlow<Boolean> = _isFormValid.asStateFlow()
+
+    private val _feedback = MutableStateFlow("")
+    val feedback: StateFlow<String> = _feedback.asStateFlow()
 
     private val _elapsedSecs = MutableStateFlow(0L)
     val elapsedSecs: StateFlow<Long> = _elapsedSecs.asStateFlow()
@@ -52,9 +59,13 @@ class ExerciseViewModel : ViewModel() {
         
         collectionJob?.cancel()
         collectionJob = viewModelScope.launch {
-            countPushUpUseCase.results.collect { result ->
+            poseDetector.poseFlow.collect { poseResult ->
+                val result = countPushUpUseCase.process(poseResult)
                 _repCount.value = result.repCount
                 _repState.value = result.repState.label
+                _currentFrame.value = result.frame
+                _isFormValid.value = result.isFormValid
+                _feedback.value = result.feedback
             }
         }
         
