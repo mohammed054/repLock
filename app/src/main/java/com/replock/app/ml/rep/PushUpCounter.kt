@@ -11,57 +11,49 @@ import kotlin.math.sqrt
 class PushUpCounter {
 
     companion object {
-        // Elbow angle thresholds
-        private const val DOWN_THRESHOLD = 90f   // ≤ this  → bottom of push-up
-        private const val UP_THRESHOLD   = 150f  // ≥ this  → arms extended (was 160 — too strict)
+        private const val DOWN_THRESHOLD = 95f
+        private const val UP_THRESHOLD   = 145f
 
-        // Body-straight validation
-        private const val BODY_MIN_ANGLE = 150.0 // hip–knee–ankle angle
+        private const val EMA_ALPHA = 0.30f
 
-        // EMA smoothing: lower α = smoother signal, higher = more responsive
-        // 0.25 kills per-frame jitter while staying <2 frames behind the real angle
-        private const val EMA_ALPHA = 0.25f
+        private const val CONFIRM_FRAMES = 3
 
-        // Minimum ms between phase transitions — prevents noise double-counting
-        private const val DEBOUNCE_MS = 350L
+        private const val DEBOUNCE_MS = 200L
+
+        private const val BODY_MIN_ANGLE = 145.0
+
+        private const val BAD_FORM_FRAMES = 9
+
+        private const val SIDE_VIEW_X_SEP = 0.14f
     }
 
-    // ── State ─────────────────────────────────────────────────────────────────
-    //
-    // currentPhase        — where we are right now (UP / TRANSITION / DOWN)
-    // lastDefinitivePhase — last time we were *actually* at an extreme (UP or DOWN)
-    //
-    // The rep count fires when currentPhase transitions into UP and
-    // lastDefinitivePhase was DOWN.  TRANSITION never blocks this — it is just
-    // a passthrough zone.  Previously the code did:
-    //
-    //   if (currentPhase == DOWN && newPhase == UP) repCount++
-    //
-    // which required jumping from DOWN straight to UP in a single frame.
-    // That's essentially impossible: every real push-up passes through TRANSITION
-    // on the way up, so the counter was permanently stuck at 0.
-    //
-    private var currentPhase        = RepPhase.UP
-    private var lastDefinitivePhase = RepPhase.UP
-    private var lastPhaseChangeTime = 0L
+    private enum class CameraOrientation { FRONT_FACE, SIDE_VIEW, UNKNOWN }
+
+    private var phase             = RepPhase.UP
+    private var lastExtreme       = RepPhase.UP
+
+    private var pendingPhase      = RepPhase.UP
+    private var pendingFrameCount = 0
+
+    private var lastRepTime       = 0L
     private var smoothedAngle: Float? = null
+
+    private var badFormCounter    = 0
 
     var repCount = 0
         private set
 
-    // ─────────────────────────────────────────────────────────────────────────
-
     data class Analysis(
-        val state: RepState,
-        val isFormValid: Boolean,
-        val feedback: String
+        val state       : RepState,
+        val isFormValid : Boolean,
+        val feedback    : String
     )
 
     fun process(frame: LandmarkFrame): Analysis {
-        val rawAngle  = bestElbowAngle(frame)
-        val isStraight = isBodyStraight(frame)
+        val rawAngle    = bestElbowAngle(frame)
+        val orientation = detectOrientation(frame)
+        val isStraight  = isBodyStraight(frame, orientation)
 
-        // EMA smoothing — stabilises jittery MLKit landmark outputs
         if (rawAngle != null) {
             smoothedAngle = smoothedAngle
                 ?.let { prev -> prev + EMA_ALPHA * (rawAngle - prev) }
@@ -71,29 +63,48 @@ class PushUpCounter {
         val angle = smoothedAngle
         val now   = System.currentTimeMillis()
 
-        if (angle != null && (now - lastPhaseChangeTime) > DEBOUNCE_MS) {
-            val newPhase = classifyAngle(angle)
-            if (newPhase != currentPhase) {
-                // Count when we return to UP after a confirmed DOWN
-                if (newPhase == RepPhase.UP && lastDefinitivePhase == RepPhase.DOWN) {
-                    repCount++
+        if (angle != null) {
+            val target = classifyAngle(angle)
+
+            if (target == phase) {
+                pendingPhase      = phase
+                pendingFrameCount = 0
+            } else if (target == pendingPhase) {
+                pendingFrameCount++
+                if (pendingFrameCount >= CONFIRM_FRAMES) {
+                    if (target == RepPhase.UP
+                        && lastExtreme == RepPhase.DOWN
+                        && (now - lastRepTime) > DEBOUNCE_MS
+                    ) {
+                        repCount++
+                        lastRepTime = now
+                    }
+                    if (target != RepPhase.TRANSITION) {
+                        lastExtreme = target
+                    }
+                    phase             = target
+                    pendingPhase      = target
+                    pendingFrameCount = 0
                 }
-                // Only anchor the "last definitive" on actual extremes, not mid-range
-                if (newPhase != RepPhase.TRANSITION) {
-                    lastDefinitivePhase = newPhase
-                }
-                currentPhase        = newPhase
-                lastPhaseChangeTime = now
+            } else {
+                pendingPhase      = target
+                pendingFrameCount = 1
             }
         }
 
-        val isFormValid = angle != null && isStraight
-        val feedback    = buildFeedback(angle, isStraight, currentPhase, lastDefinitivePhase)
+        if (!isStraight) {
+            badFormCounter = (badFormCounter + 1).coerceAtMost(BAD_FORM_FRAMES + 5)
+        } else {
+            badFormCounter = (badFormCounter - 2).coerceAtLeast(0)
+        }
+        val formBad     = badFormCounter >= BAD_FORM_FRAMES
+        val isFormValid = (angle != null) && !formBad
+        val feedback    = buildFeedback(angle, formBad, phase, lastExtreme)
 
         return Analysis(
             state = RepState(
-                phase      = currentPhase,
-                confidence = if (angle != null) confidence(currentPhase, angle) else 0f
+                phase      = phase,
+                confidence = if (angle != null) confidence(phase, angle) else 0f
             ),
             isFormValid = isFormValid,
             feedback    = feedback
@@ -101,14 +112,15 @@ class PushUpCounter {
     }
 
     fun reset() {
-        repCount            = 0
-        currentPhase        = RepPhase.UP
-        lastDefinitivePhase = RepPhase.UP
-        smoothedAngle       = null
-        lastPhaseChangeTime = 0L
+        repCount          = 0
+        phase             = RepPhase.UP
+        lastExtreme       = RepPhase.UP
+        pendingPhase      = RepPhase.UP
+        pendingFrameCount = 0
+        lastRepTime       = 0L
+        smoothedAngle     = null
+        badFormCounter    = 0
     }
-
-    // ── Private helpers ───────────────────────────────────────────────────────
 
     private fun classifyAngle(deg: Float): RepPhase = when {
         deg <= DOWN_THRESHOLD -> RepPhase.DOWN
@@ -117,35 +129,39 @@ class PushUpCounter {
     }
 
     private fun buildFeedback(
-        angle: Float?,
-        isStraight: Boolean,
-        phase: RepPhase,
-        lastDefinitive: RepPhase
+        angle      : Float?,
+        formBad    : Boolean,
+        phase      : RepPhase,
+        lastExtreme: RepPhase
     ): String = when {
         angle == null                                       -> "ADJUST CAMERA"
-        !isStraight                                         -> "KEEP BACK STRAIGHT"
-        phase == RepPhase.UP && lastDefinitive == RepPhase.UP -> "LOWER YOURSELF"
+        formBad                                             -> "KEEP BACK STRAIGHT"
+        phase == RepPhase.UP && lastExtreme == RepPhase.UP  -> "LOWER YOURSELF"
         phase == RepPhase.DOWN                              -> "PUSH UP"
-        else                                                -> "KEEP GOING"
+        else                                               -> "KEEP GOING"
     }
 
     private fun confidence(phase: RepPhase, deg: Float): Float = when (phase) {
         RepPhase.DOWN       -> ((DOWN_THRESHOLD - deg) / DOWN_THRESHOLD).coerceIn(0f, 1f)
-        RepPhase.UP         -> ((deg - UP_THRESHOLD) / (180f - UP_THRESHOLD)).coerceIn(0f, 1f)
+        RepPhase.UP         -> ((deg - UP_THRESHOLD)   / (180f - UP_THRESHOLD)).coerceIn(0f, 1f)
         RepPhase.TRANSITION -> {
             val mid = (DOWN_THRESHOLD + UP_THRESHOLD) / 2f
             (1f - abs(deg - mid) / (mid - DOWN_THRESHOLD)).coerceIn(0f, 1f)
         }
     }
 
-    /**
-     * Prefer whichever side has all three joints visible; average both sides when
-     * both are detected.  This prevents a partially-occluded limb from corrupting
-     * the reading.
-     */
+    private fun detectOrientation(frame: LandmarkFrame): CameraOrientation {
+        val ls = frame.leftShoulder  ?: return CameraOrientation.UNKNOWN
+        val rs = frame.rightShoulder ?: return CameraOrientation.UNKNOWN
+        return if (abs(ls.x - rs.x) < SIDE_VIEW_X_SEP)
+            CameraOrientation.SIDE_VIEW
+        else
+            CameraOrientation.FRONT_FACE
+    }
+
     private fun bestElbowAngle(frame: LandmarkFrame): Float? {
-        val left  = calculateAngle(frame.leftShoulder,  frame.leftElbow,  frame.leftWrist)
-        val right = calculateAngle(frame.rightShoulder, frame.rightElbow, frame.rightWrist)
+        val left  = angle2D(frame.leftShoulder,  frame.leftElbow,  frame.leftWrist)
+        val right = angle2D(frame.rightShoulder, frame.rightElbow, frame.rightWrist)
         return when {
             left != null && right != null -> (left + right) / 2f
             left  != null                 -> left
@@ -154,21 +170,28 @@ class PushUpCounter {
         }
     }
 
-    /**
-     * Falls back from ankle to knee when the ankle is off-camera (common in
-     * push-up setups).  Returns true (form OK) when hips aren't visible at all —
-     * we can't penalise what we can't see.
-     */
-    private fun isBodyStraight(frame: LandmarkFrame): Boolean {
-        val left  = calculateAngle(frame.leftShoulder,  frame.leftHip,  frame.leftAnkle)
-                 ?: calculateAngle(frame.leftShoulder,  frame.leftHip,  frame.leftKnee)
-        val right = calculateAngle(frame.rightShoulder, frame.rightHip, frame.rightAnkle)
-                 ?: calculateAngle(frame.rightShoulder, frame.rightHip, frame.rightKnee)
-        val samples = listOfNotNull(left, right)
-        return samples.isEmpty() || samples.average() >= BODY_MIN_ANGLE
-    }
+    private fun isBodyStraight(frame: LandmarkFrame, orientation: CameraOrientation): Boolean =
+        when (orientation) {
+            CameraOrientation.SIDE_VIEW -> {
+                val left  = angle2D(frame.leftShoulder,  frame.leftHip,  frame.leftAnkle)
+                         ?: angle2D(frame.leftShoulder,  frame.leftHip,  frame.leftKnee)
+                val right = angle2D(frame.rightShoulder, frame.rightHip, frame.rightAnkle)
+                         ?: angle2D(frame.rightShoulder, frame.rightHip, frame.rightKnee)
+                val samples = listOfNotNull(left, right)
+                samples.isEmpty() || samples.average() >= BODY_MIN_ANGLE
+            }
+            CameraOrientation.FRONT_FACE -> {
+                val left  = angle3D(frame.leftShoulder,  frame.leftHip,  frame.leftAnkle)
+                         ?: angle3D(frame.leftShoulder,  frame.leftHip,  frame.leftKnee)
+                val right = angle3D(frame.rightShoulder, frame.rightHip, frame.rightAnkle)
+                         ?: angle3D(frame.rightShoulder, frame.rightHip, frame.rightKnee)
+                val samples = listOfNotNull(left, right)
+                samples.isEmpty() || samples.average() >= (BODY_MIN_ANGLE - 8.0)
+            }
+            CameraOrientation.UNKNOWN -> true
+        }
 
-    private fun calculateAngle(a: Joint?, b: Joint?, c: Joint?): Float? {
+    private fun angle2D(a: Joint?, b: Joint?, c: Joint?): Float? {
         if (a == null || b == null || c == null) return null
         val v1x = a.x - b.x;  val v1y = a.y - b.y
         val v2x = c.x - b.x;  val v2y = c.y - b.y
@@ -176,6 +199,18 @@ class PushUpCounter {
         val m2  = sqrt(v2x * v2x + v2y * v2y)
         if (m1 < 1e-6f || m2 < 1e-6f) return null
         val cos = ((v1x * v2x + v1y * v2y) / (m1 * m2)).toDouble().coerceIn(-1.0, 1.0)
+        return Math.toDegrees(acos(cos)).toFloat()
+    }
+
+    private fun angle3D(a: Joint?, b: Joint?, c: Joint?): Float? {
+        if (a == null || b == null || c == null) return null
+        val v1x = a.x - b.x;  val v1y = a.y - b.y;  val v1z = a.z - b.z
+        val v2x = c.x - b.x;  val v2y = c.y - b.y;  val v2z = c.z - b.z
+        val m1  = sqrt(v1x * v1x + v1y * v1y + v1z * v1z)
+        val m2  = sqrt(v2x * v2x + v2y * v2y + v2z * v2z)
+        if (m1 < 1e-6f || m2 < 1e-6f) return null
+        val dot = v1x * v2x + v1y * v2y + v1z * v2z
+        val cos = (dot / (m1 * m2)).toDouble().coerceIn(-1.0, 1.0)
         return Math.toDegrees(acos(cos)).toFloat()
     }
 }

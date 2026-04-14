@@ -3,6 +3,7 @@ package com.replock.app.presentation.exercise
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.replock.app.domain.usecase.CountPushUpUseCase
+import com.replock.app.ml.pose.FrameSmoother
 import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.ml.pose.PoseDetector
 import kotlinx.coroutines.Job
@@ -23,6 +24,8 @@ class ExerciseViewModel : ViewModel() {
 
     private val countPushUpUseCase by lazy { CountPushUpUseCase() }
 
+    private val frameSmoother = FrameSmoother(alpha = 0.40f, holdFrames = 7)
+
     private val _repCount     = MutableStateFlow(0)
     val repCount: StateFlow<Int> = _repCount.asStateFlow()
 
@@ -41,8 +44,6 @@ class ExerciseViewModel : ViewModel() {
     private val _elapsedSecs  = MutableStateFlow(0L)
     val elapsedSecs: StateFlow<Long> = _elapsedSecs.asStateFlow()
 
-    // Camera frame dimensions — needed by SkeletonOverlay to compute the
-    // FILL_CENTER crop transform so joints map to the right canvas position.
     private val _frameWidth   = MutableStateFlow(1)
     val frameWidth: StateFlow<Int> = _frameWidth.asStateFlow()
 
@@ -57,6 +58,7 @@ class ExerciseViewModel : ViewModel() {
 
     fun startSession() {
         countPushUpUseCase.reset()
+        frameSmoother.reset()
         _repCount.value    = 0
         _repState.value    = "WAITING"
         _elapsedSecs.value = 0
@@ -65,9 +67,12 @@ class ExerciseViewModel : ViewModel() {
         collectionJob = viewModelScope.launch {
             poseDetector.poseFlow.collect { poseResult ->
                 val r = countPushUpUseCase.process(poseResult)
+
+                val smoothed = r.frame?.let { frameSmoother.smooth(it) }
+
                 _repCount.value     = r.repCount
                 _repState.value     = r.repState.label
-                _currentFrame.value = r.frame
+                _currentFrame.value = smoothed
                 _isFormValid.value  = r.isFormValid
                 _feedback.value     = r.feedback
                 _frameWidth.value   = r.frameWidth
@@ -91,6 +96,7 @@ class ExerciseViewModel : ViewModel() {
         timerJob      = null
         _poseDetector?.close()
         _poseDetector = null
+        frameSmoother.reset()
     }
 
     override fun onCleared() {
