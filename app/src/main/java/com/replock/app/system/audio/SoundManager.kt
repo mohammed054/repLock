@@ -49,11 +49,15 @@ class SoundManager {
                 .build()
 
             clickTrack?.write(buffer, 0, buffer.size)
+            clickTrack?.notificationMarkerPosition = samples
+            clickTrack?.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                override fun onMarkerReached(track: AudioTrack) {
+                    track.release()
+                    if (clickTrack == track) clickTrack = null
+                }
+                override fun onPeriodicNotification(track: AudioTrack) {}
+            })
             clickTrack?.play()
-
-            clickTrack?.setOnCompletionListener {
-                it.release()
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
