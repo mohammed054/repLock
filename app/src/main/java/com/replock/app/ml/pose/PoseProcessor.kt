@@ -1,35 +1,58 @@
 package com.replock.app.ml.pose
 
 class PoseProcessor {
-
-    private val motionTracker = MotionTracker()
-    private val smoother = PoseSmoother()
+    private val tracker = MotionTracker()
 
     fun process(frame: LandmarkFrame): LandmarkFrame {
+        var lsh: Joint? = null
+        var rsh: Joint? = null
+        var lel: Joint? = null
+        var rel: Joint? = null
+        var lwr: Joint? = null
+        var rwr: Joint? = null
+        var lhi: Joint? = null
+        var rhi: Joint? = null
+        var lkn: Joint? = null
+        var rkn: Joint? = null
+        var lan: Joint? = null
+        var ran: Joint? = null
 
-        fun handle(key: String, joint: Joint?): Joint? {
-            val motion = motionTracker.update(key, joint)
-            return smoother.smooth(key, motion)
+        frame.forEach { key, joint ->
+            val updated = tracker.update(key, joint)?.joint
+            when (key) {
+                "lsh" -> lsh = updated
+                "rsh" -> rsh = updated
+                "lel" -> lel = updated
+                "rel" -> rel = updated
+                "lwr" -> lwr = updated
+                "rwr" -> rwr = updated
+                "lhi" -> lhi = updated
+                "rhi" -> rhi = updated
+                "lkn" -> lkn = updated
+                "rkn" -> rkn = updated
+                "lan" -> lan = updated
+                "ran" -> ran = updated
+            }
         }
 
         return LandmarkFrame(
-            leftShoulder  = handle("lsh", frame.leftShoulder),
-            rightShoulder = handle("rsh", frame.rightShoulder),
-            leftElbow     = handle("lel", frame.leftElbow),
-            rightElbow    = handle("rel", frame.rightElbow),
-            leftWrist     = handle("lwr", frame.leftWrist),
-            rightWrist    = handle("rwr", frame.rightWrist),
-            leftHip       = handle("lhi", frame.leftHip),
-            rightHip      = handle("rhi", frame.rightHip),
-            leftKnee      = handle("lkn", frame.leftKnee),
-            rightKnee     = handle("rkn", frame.rightKnee),
-            leftAnkle     = handle("lan", frame.leftAnkle),
-            rightAnkle    = handle("ran", frame.rightAnkle)
+            leftShoulder = lsh,
+            rightShoulder = rsh,
+            leftElbow = lel,
+            rightElbow = rel,
+            leftWrist = lwr,
+            rightWrist = rwr,
+            leftHip = lhi,
+            rightHip = rhi,
+            leftKnee = lkn,
+            rightKnee = rkn,
+            leftAnkle = lan,
+            rightAnkle = ran,
+            timestamp = frame.timestamp
         )
     }
 
     fun reset() {
-        motionTracker.reset()
-        smoother.reset()
+        tracker.reset()
     }
 }

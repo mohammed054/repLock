@@ -12,8 +12,17 @@ data class LandmarkFrame(
     val leftKnee: Joint?,
     val rightKnee: Joint?,
     val leftAnkle: Joint?,
-    val rightAnkle: Joint?
+    val rightAnkle: Joint?,
+    val timestamp: Long = System.currentTimeMillis()
 ) {
+    val isValid: Boolean
+        get() = listOfNotNull(
+            leftShoulder, leftElbow, leftWrist, leftHip, leftAnkle
+        ).all { it.inFrameLikelihood >= MIN_LIKELIHOOD }
+
+    companion object {
+        const val MIN_LIKELIHOOD = 0.5f
+    }
 
     fun forEach(action: (String, Joint?) -> Unit) {
         action("lsh", leftShoulder)

@@ -7,32 +7,35 @@ object PoseLandmarkMapper {
 
     private const val MIN_CONFIDENCE = 0.5f
 
-    private fun mapLandmark(pose: Pose, type: Int): Joint? {
-        val lm = pose.getPoseLandmark(type) ?: return null
-        if (lm.inFrameLikelihood < MIN_CONFIDENCE) return null
+    fun map(pose: Pose, imageWidth: Int = 1, imageHeight: Int = 1): LandmarkFrame {
+        val w = imageWidth.toFloat().coerceAtLeast(1f)
+        val h = imageHeight.toFloat().coerceAtLeast(1f)
 
-        return Joint(
-            x = lm.position3D.x,
-            y = lm.position3D.y,
-            z = lm.position3D.z,
-            inFrameLikelihood = lm.inFrameLikelihood
-        )
-    }
+        fun mapLandmark(type: Int): Joint? {
+            val lm = pose.getPoseLandmark(type) ?: return null
+            if (lm.inFrameLikelihood < MIN_CONFIDENCE) return null
 
-    fun map(pose: Pose): LandmarkFrame {
+            return Joint(
+                x = lm.position.x / w,
+                y = lm.position.y / h,
+                z = lm.position3D.z,
+                inFrameLikelihood = lm.inFrameLikelihood
+            )
+        }
+
         return LandmarkFrame(
-            leftShoulder  = mapLandmark(pose, PoseLandmark.LEFT_SHOULDER),
-            rightShoulder = mapLandmark(pose, PoseLandmark.RIGHT_SHOULDER),
-            leftElbow     = mapLandmark(pose, PoseLandmark.LEFT_ELBOW),
-            rightElbow    = mapLandmark(pose, PoseLandmark.RIGHT_ELBOW),
-            leftWrist     = mapLandmark(pose, PoseLandmark.LEFT_WRIST),
-            rightWrist    = mapLandmark(pose, PoseLandmark.RIGHT_WRIST),
-            leftHip       = mapLandmark(pose, PoseLandmark.LEFT_HIP),
-            rightHip      = mapLandmark(pose, PoseLandmark.RIGHT_HIP),
-            leftKnee      = mapLandmark(pose, PoseLandmark.LEFT_KNEE),
-            rightKnee     = mapLandmark(pose, PoseLandmark.RIGHT_KNEE),
-            leftAnkle     = mapLandmark(pose, PoseLandmark.LEFT_ANKLE),
-            rightAnkle    = mapLandmark(pose, PoseLandmark.RIGHT_ANKLE)
+            leftShoulder  = mapLandmark(PoseLandmark.LEFT_SHOULDER),
+            rightShoulder = mapLandmark(PoseLandmark.RIGHT_SHOULDER),
+            leftElbow     = mapLandmark(PoseLandmark.LEFT_ELBOW),
+            rightElbow    = mapLandmark(PoseLandmark.RIGHT_ELBOW),
+            leftWrist     = mapLandmark(PoseLandmark.LEFT_WRIST),
+            rightWrist    = mapLandmark(PoseLandmark.RIGHT_WRIST),
+            leftHip       = mapLandmark(PoseLandmark.LEFT_HIP),
+            rightHip      = mapLandmark(PoseLandmark.RIGHT_HIP),
+            leftKnee      = mapLandmark(PoseLandmark.LEFT_KNEE),
+            rightKnee     = mapLandmark(PoseLandmark.RIGHT_KNEE),
+            leftAnkle     = mapLandmark(PoseLandmark.LEFT_ANKLE),
+            rightAnkle    = mapLandmark(PoseLandmark.RIGHT_ANKLE)
         )
     }
 }

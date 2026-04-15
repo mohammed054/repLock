@@ -1,84 +1,90 @@
 package com.replock.app.domain.usecase
 
-import com.replock.app.domain.model.RepState
-import com.replock.app.ml.pose.Joint
+import com.replock.app.domain.model.Analysis
+import com.replock.app.data.Difficulty
 import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.ml.pose.PoseDetector
 import com.replock.app.ml.pose.PoseLandmarkMapper
+import com.replock.app.ml.pose.PoseProcessor
 import com.replock.app.ml.rep.PushUpCounter
 
 class CountPushUpUseCase(
-    private val counter: PushUpCounter = PushUpCounter()
+    private val difficulty: Difficulty = Difficulty.MEDIUM,
+    private val counter: PushUpCounter = PushUpCounter(difficulty.strictness),
+    private val processor: PoseProcessor = PoseProcessor()
 ) {
 
     data class Result(
-        val repCount    : Int,
-        val repState    : RepState,
-        val frame       : LandmarkFrame? = null,
-        val isFormValid : Boolean = false,
-        val feedback    : String = "",
-        // ── NEW: propagated so SkeletonOverlay can compute the FILL_CENTER crop ──
-        val frameWidth  : Int = 1,
-        val frameHeight : Int = 1
+        val repCount: Int,
+        val analysis: Analysis,
+        val frame: LandmarkFrame?,
+        val frameWidth: Int,
+        val frameHeight: Int
     )
 
     fun process(poseResult: PoseDetector.Result): Result {
-        val frame = PoseLandmarkMapper.map(poseResult.pose)
+        val rawFrame = PoseLandmarkMapper.map(
+            poseResult.pose,
+            poseResult.width,
+            poseResult.height
+        )
 
-        // mirrorX = true because PreviewView automatically mirrors front-camera
-        // output for the user, but MLKit processes the raw (non-mirrored) frame.
-        // Without flipping x here, every skeleton joint appears on the wrong side.
-        val scaledFrame = scaleFrame(
-            frame   = frame,
-            width   = poseResult.width,
-            height  = poseResult.height,
+        val normalized = normalizeFrame(
+            frame = rawFrame,
+            width = poseResult.width,
+            height = poseResult.height,
             mirrorX = true
         )
 
-        val analysis = counter.process(scaledFrame)
+        val processedFrame = processor.process(normalized)
+        val analysis = counter.process(processedFrame)
+
         return Result(
-            repCount    = counter.repCount,
-            repState    = analysis.state,
-            frame       = scaledFrame,
-            isFormValid = analysis.isFormValid,
-            feedback    = analysis.feedback,
-            frameWidth  = poseResult.width,
+            repCount = counter.repCount,
+            analysis = analysis,
+            frame = processedFrame,
+            frameWidth = poseResult.width,
             frameHeight = poseResult.height
         )
     }
 
-    fun reset() = counter.reset()
+    fun reset() {
+        counter.reset()
+        processor.reset()
+    }
 
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private fun scaleFrame(
+    private fun normalizeFrame(
         frame: LandmarkFrame,
         width: Int,
         height: Int,
         mirrorX: Boolean
     ): LandmarkFrame {
-        fun scale(j: Joint?): Joint? {
+        val safeWidth = if (width == 0) 1f else width.toFloat()
+        val safeHeight = if (height == 0) 1f else height.toFloat()
+
+        fun normalize(j: com.replock.app.ml.pose.Joint?): com.replock.app.ml.pose.Joint? {
             j ?: return null
+            val nx = j.x / safeWidth
+            val ny = j.y / safeHeight
             return j.copy(
-                // Normalize to [0,1].  When mirrorX=true, flip: 0→1, 1→0
-                // so that left/right matches what the user sees in the mirrored preview.
-                x = if (mirrorX) 1f - (j.x / width) else j.x / width,
-                y = j.y / height
+                x = if (mirrorX) 1f - nx else nx,
+                y = ny
             )
         }
+
         return LandmarkFrame(
-            leftShoulder  = scale(frame.leftShoulder),
-            rightShoulder = scale(frame.rightShoulder),
-            leftElbow     = scale(frame.leftElbow),
-            rightElbow    = scale(frame.rightElbow),
-            leftWrist     = scale(frame.leftWrist),
-            rightWrist    = scale(frame.rightWrist),
-            leftHip       = scale(frame.leftHip),
-            rightHip      = scale(frame.rightHip),
-            leftKnee      = scale(frame.leftKnee),
-            rightKnee     = scale(frame.rightKnee),
-            leftAnkle     = scale(frame.leftAnkle),
-            rightAnkle    = scale(frame.rightAnkle)
+            leftShoulder  = normalize(frame.leftShoulder),
+            rightShoulder = normalize(frame.rightShoulder),
+            leftElbow     = normalize(frame.leftElbow),
+            rightElbow    = normalize(frame.rightElbow),
+            leftWrist     = normalize(frame.leftWrist),
+            rightWrist    = normalize(frame.rightWrist),
+            leftHip       = normalize(frame.leftHip),
+            rightHip      = normalize(frame.rightHip),
+            leftKnee      = normalize(frame.leftKnee),
+            rightKnee     = normalize(frame.rightKnee),
+            leftAnkle     = normalize(frame.leftAnkle),
+            rightAnkle    = normalize(frame.rightAnkle)
         )
     }
 }
