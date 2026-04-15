@@ -21,56 +21,47 @@ class PoseDetector {
         val height: Int
     )
 
-    private val mlKitOptions: AccuratePoseDetectorOptions =
-        AccuratePoseDetectorOptions.Builder()
-            .setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE)
-            .build()
+    private val detector: MLKitPoseDetector =
+        PoseDetection.getClient(
+            AccuratePoseDetectorOptions.Builder()
+                .setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE)
+                .build()
+        )
 
-    private val mlKitDetector: MLKitPoseDetector =
-        PoseDetection.getClient(mlKitOptions)
+    private val executor = Executors.newSingleThreadExecutor()
+    private val channel = Channel<Result>(Channel.CONFLATED)
 
-    private val analysisExecutor = Executors.newSingleThreadExecutor()
-
-    private val poseChannel = Channel<Result>(Channel.CONFLATED)
+    val poseFlow: Flow<Result> = channel.receiveAsFlow()
 
     val imageAnalysisUseCase: ImageAnalysis =
         ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
-            .also { analysis ->
-                analysis.setAnalyzer(analysisExecutor, ::analyzeImage)
+            .also {
+                it.setAnalyzer(executor, ::analyze)
             }
-
-    val poseFlow: Flow<Result> = poseChannel.receiveAsFlow()
 
     fun close() {
         imageAnalysisUseCase.clearAnalyzer()
-        mlKitDetector.close()
-        poseChannel.close()
-        analysisExecutor.shutdown()
+        detector.close()
+        channel.close()
+        executor.shutdown()
     }
 
     @SuppressLint("UnsafeOptInUsageError")
-    private fun analyzeImage(proxy: ImageProxy) {
-        val mediaImage = proxy.image
-        if (mediaImage == null) {
-            proxy.close()
-            return
-        }
+    private fun analyze(proxy: ImageProxy) {
+        val image = proxy.image ?: return proxy.close()
 
         val rotation = proxy.imageInfo.rotationDegrees
-        val width = if (rotation == 90 || rotation == 270) proxy.height else proxy.width
-        val height = if (rotation == 90 || rotation == 270) proxy.width else proxy.height
+        val width = if (rotation % 180 == 0) proxy.width else proxy.height
+        val height = if (rotation % 180 == 0) proxy.height else proxy.width
 
-        val inputImage = InputImage.fromMediaImage(
-            mediaImage,
-            rotation
-        )
+        val input = InputImage.fromMediaImage(image, rotation)
 
-        mlKitDetector.process(inputImage)
+        detector.process(input)
             .addOnSuccessListener { pose ->
                 if (pose.allPoseLandmarks.isNotEmpty()) {
-                    poseChannel.trySend(Result(pose, width, height))
+                    channel.trySend(Result(pose, width, height))
                 }
             }
             .addOnCompleteListener {
