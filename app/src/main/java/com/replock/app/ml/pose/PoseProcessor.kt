@@ -2,7 +2,7 @@ package com.replock.app.ml.pose
 
 class PoseProcessor {
     private val tracker = MotionTracker()
-    private val smoother = PoseSmoother(smoothingFactor = 0.25f)
+    private val smoother = PoseSmoother(smoothingFactor = 0.4f)
 
     fun process(frame: LandmarkFrame): LandmarkFrame {
         var lsh: Joint? = null

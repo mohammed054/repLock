@@ -1,8 +1,8 @@
 package com.replock.app.ml.pose
 
 class MotionTracker(
-    private val maxMissingFrames: Int = 10,
-    private val velocityDamping: Float = 0.9f
+    private val maxMissingFrames: Int = 8,
+    private val velocityDamping: Float = 0.75f
 ) {
 
     data class MotionJoint(

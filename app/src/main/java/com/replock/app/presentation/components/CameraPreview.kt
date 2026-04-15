@@ -288,32 +288,29 @@ private fun SkeletonOverlay(
     frameHeight: Int
 ) {
     Canvas(modifier = modifier) {
-        val color = if (isFormValid) AccentGreen else AccentCyan
+        val primaryColor = if (isFormValid) AccentGreen else AccentCyan
+        val glowColor = primaryColor.copy(alpha = 0.3f)
 
         val fa = if (frameHeight > 0) frameWidth.toFloat() / frameHeight else 1f
         val ca = if (size.height > 0f) size.width / size.height else 1f
 
-        // Compute the normalised crop offset and stretch factor for each axis
         val cropX: Float
         val cropY: Float
-        val stretchX: Float  // how much [0,1] frame space maps to [0,1] canvas space
+        val stretchX: Float
         val stretchY: Float
 
         if (fa < ca) {
-            // Frame taller → fill width, crop top & bottom
             cropY    = (1f - fa / ca) / 2f
             cropX    = 0f
             stretchX = 1f
             stretchY = ca / fa
         } else {
-            // Frame wider (or equal) → fill height, crop left & right
             cropX    = (1f - ca / fa) / 2f
             cropY    = 0f
             stretchX = fa / ca
             stretchY = 1f
         }
 
-        // Map a normalised-frame joint to a canvas pixel Offset
         fun toCanvas(j: Joint): Offset {
             val nx = ((j.x - cropX) * stretchX).coerceIn(0f, 1f)
             val ny = ((j.y - cropY) * stretchY).coerceIn(0f, 1f)
@@ -322,46 +319,72 @@ private fun SkeletonOverlay(
 
         fun drawBone(j1: Joint?, j2: Joint?) {
             if (j1 == null || j2 == null) return
+            val start = toCanvas(j1)
+            val end = toCanvas(j2)
+
             drawLine(
-                color       = color.copy(alpha = 0.85f),
-                start       = toCanvas(j1),
-                end         = toCanvas(j2),
-                strokeWidth = 6f,
+                color       = glowColor,
+                start       = start,
+                end         = end,
+                strokeWidth = 20f,
+                cap         = StrokeCap.Round
+            )
+            drawLine(
+                color       = primaryColor.copy(alpha = 0.9f),
+                start       = start,
+                end         = end,
+                strokeWidth = 10f,
+                cap         = StrokeCap.Round
+            )
+            drawLine(
+                color       = Color.White.copy(alpha = 0.3f),
+                start       = start,
+                end         = end,
+                strokeWidth = 4f,
                 cap         = StrokeCap.Round
             )
         }
 
-        // Arms
         drawBone(frame.leftShoulder,  frame.leftElbow)
         drawBone(frame.leftElbow,     frame.leftWrist)
         drawBone(frame.rightShoulder, frame.rightElbow)
         drawBone(frame.rightElbow,    frame.rightWrist)
 
-        // Torso
         drawBone(frame.leftShoulder,  frame.rightShoulder)
         drawBone(frame.leftShoulder,  frame.leftHip)
         drawBone(frame.rightShoulder, frame.rightHip)
         drawBone(frame.leftHip,       frame.rightHip)
 
-        // Legs
         drawBone(frame.leftHip,   frame.leftKnee)
         drawBone(frame.leftKnee,  frame.leftAnkle)
         drawBone(frame.rightHip,  frame.rightKnee)
         drawBone(frame.rightKnee, frame.rightAnkle)
 
-        // Joint dots
-        listOfNotNull(
+        val joints = listOfNotNull(
             frame.leftShoulder, frame.rightShoulder,
             frame.leftElbow,    frame.rightElbow,
             frame.leftWrist,    frame.rightWrist,
             frame.leftHip,      frame.rightHip,
             frame.leftKnee,     frame.rightKnee,
             frame.leftAnkle,    frame.rightAnkle
-        ).forEach { j ->
+        )
+
+        joints.forEach { j ->
+            val pos = toCanvas(j)
             drawCircle(
-                color  = color,
-                radius = 8f,
-                center = toCanvas(j)
+                color  = glowColor,
+                radius = 22f,
+                center = pos
+            )
+            drawCircle(
+                color  = primaryColor,
+                radius = 14f,
+                center = pos
+            )
+            drawCircle(
+                color  = Color.White.copy(alpha = 0.5f),
+                radius = 6f,
+                center = pos
             )
         }
     }

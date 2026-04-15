@@ -6,6 +6,7 @@ import com.replock.app.data.Difficulty
 import com.replock.app.domain.usecase.CountPushUpUseCase
 import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.ml.pose.PoseDetector
+import com.replock.app.system.audio.SoundManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,9 @@ class ExerciseViewModel(
     private val countPushUpUseCase by lazy { 
         CountPushUpUseCase(difficulty = difficulty) 
     }
+
+    private val soundManager = SoundManager()
+    private var lastRepCount = 0
 
     private val _repCount = MutableStateFlow(0)
     val repCount: StateFlow<Int> = _repCount.asStateFlow()
@@ -87,7 +91,13 @@ class ExerciseViewModel(
             poseDetector.poseFlow.collect { poseResult ->
                 val r = countPushUpUseCase.process(poseResult)
 
+                val previousRepCount = _repCount.value
                 _repCount.value = r.repCount
+
+                if (r.repCount > previousRepCount) {
+                    soundManager.playRepComplete()
+                }
+
                 _formScore.value = r.analysis.formScore
                 _feedback.value = r.analysis.feedback
                 _repState.value = r.analysis.phase
@@ -126,6 +136,7 @@ class ExerciseViewModel(
         timerJob?.cancel()
         collectionJob = null
         timerJob = null
+        soundManager.release()
         _poseDetector?.close()
         _poseDetector = null
     }

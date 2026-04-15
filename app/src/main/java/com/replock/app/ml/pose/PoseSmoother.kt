@@ -1,6 +1,6 @@
 package com.replock.app.ml.pose
 
-class PoseSmoother(private val smoothingFactor: Float = 0.3f) {
+class PoseSmoother(private val smoothingFactor: Float = 0.35f) {
 
     private val previousPositions = HashMap<String, Joint>()
 
