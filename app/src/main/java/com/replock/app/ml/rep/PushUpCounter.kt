@@ -8,16 +8,19 @@ import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.sqrt
 
-class PushUpCounter(private val strictness: Float = 0.6f) : ExerciseCounter {
+class PushUpCounter(private val strictness: Float = 0.3f) : ExerciseCounter {
 
     private val downThreshold: Float
-        get() = lerp(100f, 80f, strictness)
+        get() = lerp(110f, 90f, strictness)
 
     private val upThreshold: Float
-        get() = lerp(150f, 160f, strictness)
+        get() = lerp(120f, 140f, strictness)
 
     private val alignmentTolerance: Float
-        get() = lerp(20f, 10f, strictness)
+        get() = lerp(30f, 15f, strictness)
+
+    private val minRepCompletionAngle: Float
+        get() = 135f
 
     private enum class Phase { UP, GOING_DOWN, DOWN, GOING_UP }
 
@@ -28,6 +31,8 @@ class PushUpCounter(private val strictness: Float = 0.6f) : ExerciseCounter {
     private var minAngleSeen = 180f
     private var formScoreAccum = 0f
     private var formSampleCount = 0
+    private var warningCount = 0
+    private var lastFeedback = ""
 
     override fun reset() {
         phase = Phase.UP
@@ -35,35 +40,45 @@ class PushUpCounter(private val strictness: Float = 0.6f) : ExerciseCounter {
         minAngleSeen = 180f
         formScoreAccum = 0f
         formSampleCount = 0
+        warningCount = 0
+        lastFeedback = ""
     }
 
     override fun process(frame: LandmarkFrame): Analysis {
         if (!frame.isValid) {
-            return Analysis(repCount, 0, "GET IN FRAME", poseDetected = false, goodForm = false)
+            return Analysis(repCount, 0, "GET IN FRAME", poseDetected = false, goodForm = false, phase = "STANDBY")
         }
 
         val elbowAngle = computeAngle(frame.leftShoulder, frame.leftElbow, frame.leftWrist)
         val alignScore = computeAlignmentScore(frame)
         val formScore = computeFormScore(elbowAngle, alignScore)
-        val goodForm = formScore >= 60
+        val goodForm = formScore >= 40
 
         if (elbowAngle < minAngleSeen) minAngleSeen = elbowAngle
         formScoreAccum += formScore
         formSampleCount++
 
-        val cue = updatePhase(elbowAngle, formScore, alignScore)
+        val feedback = updatePhase(elbowAngle, formScore, alignScore)
 
-        return Analysis(repCount, formScore.toInt(), cue, poseDetected = true, goodForm = goodForm)
+        return Analysis(
+            repCount = repCount,
+            formScore = formScore.toInt(),
+            feedback = feedback,
+            poseDetected = true,
+            goodForm = goodForm,
+            phase = phase.name
+        )
     }
 
     private fun updatePhase(elbowAngle: Float, formScore: Float, alignScore: Float): String {
+        val wasInPhase = phase.name
         return when (phase) {
             Phase.UP -> {
-                if (elbowAngle < downThreshold + 30f) {
+                if (elbowAngle < upThreshold - 20f) {
                     phase = Phase.GOING_DOWN
                     minAngleSeen = elbowAngle
                 }
-                if (alignScore < (1f - alignmentTolerance / 40f)) "STRAIGHTEN BODY" else "LOWER"
+                if (alignScore < (1f - alignmentTolerance / 50f)) "STRAIGHTEN BODY" else "LOWER"
             }
 
             Phase.GOING_DOWN -> {
@@ -71,7 +86,7 @@ class PushUpCounter(private val strictness: Float = 0.6f) : ExerciseCounter {
                 if (elbowAngle <= downThreshold) {
                     phase = Phase.DOWN
                     "PUSH!"
-                } else if (elbowAngle > upThreshold) {
+                } else if (elbowAngle > upThreshold + 10f) {
                     phase = Phase.UP
                     "LOWER!"
                 } else {
@@ -80,15 +95,15 @@ class PushUpCounter(private val strictness: Float = 0.6f) : ExerciseCounter {
             }
 
             Phase.DOWN -> {
-                if (elbowAngle > downThreshold + 15f) {
+                if (elbowAngle > downThreshold + 20f) {
                     phase = Phase.GOING_UP
                 }
                 "PUSH!"
             }
 
             Phase.GOING_UP -> {
-                if (elbowAngle >= upThreshold) {
-                    if (minAngleSeen <= downThreshold && formScore >= 50f) {
+                if (elbowAngle >= minRepCompletionAngle) {
+                    if (minAngleSeen <= downThreshold + 5f) {
                         repCount++
                         minAngleSeen = 180f
                         formScoreAccum = 0f
@@ -96,6 +111,9 @@ class PushUpCounter(private val strictness: Float = 0.6f) : ExerciseCounter {
                     }
                     phase = Phase.UP
                     "GOOD"
+                } else if (elbowAngle > upThreshold + 15f) {
+                    phase = Phase.UP
+                    "LOWER!"
                 } else {
                     "PUSH!"
                 }

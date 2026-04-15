@@ -34,8 +34,11 @@ class ExerciseViewModel(
     private val _formScore = MutableStateFlow(0)
     val formScore: StateFlow<Int> = _formScore.asStateFlow()
 
-    private val _cue = MutableStateFlow("")
-    val cue: StateFlow<String> = _cue.asStateFlow()
+    private val _feedback = MutableStateFlow("")
+    val feedback: StateFlow<String> = _feedback.asStateFlow()
+
+    private val _repState = MutableStateFlow("WAITING")
+    val repState: StateFlow<String> = _repState.asStateFlow()
 
     private val _currentFrame = MutableStateFlow<LandmarkFrame?>(null)
     val currentFrame: StateFlow<LandmarkFrame?> = _currentFrame.asStateFlow()
@@ -55,17 +58,28 @@ class ExerciseViewModel(
     private val _frameHeight = MutableStateFlow(1)
     val frameHeight: StateFlow<Int> = _frameHeight.asStateFlow()
 
+    private val _isDebugMode = MutableStateFlow(false)
+    val isDebugMode: StateFlow<Boolean> = _isDebugMode.asStateFlow()
+
+    private val _trackingQuality = MutableStateFlow(0f)
+    val trackingQuality: StateFlow<Float> = _trackingQuality.asStateFlow()
+
     private var collectionJob: Job? = null
     private var timerJob: Job? = null
 
     val imageAnalysisUseCase: androidx.camera.core.ImageAnalysis
         get() = poseDetector.imageAnalysisUseCase
 
+    fun toggleDebugMode() {
+        _isDebugMode.value = !_isDebugMode.value
+    }
+
     fun startSession() {
         countPushUpUseCase.reset()
         _repCount.value = 0
         _formScore.value = 0
-        _cue.value = ""
+        _feedback.value = ""
+        _repState.value = "WAITING"
         _elapsedSecs.value = 0
 
         collectionJob?.cancel()
@@ -75,12 +89,26 @@ class ExerciseViewModel(
 
                 _repCount.value = r.repCount
                 _formScore.value = r.analysis.formScore
-                _cue.value = r.analysis.cue
+                _feedback.value = r.analysis.feedback
+                _repState.value = r.analysis.phase
                 _currentFrame.value = r.frame
                 _isFormValid.value = r.analysis.goodForm
                 _poseDetected.value = r.analysis.poseDetected
                 _frameWidth.value = r.frameWidth
                 _frameHeight.value = r.frameHeight
+
+                _trackingQuality.value = r.frame?.let { frame ->
+                    val joints = listOfNotNull(
+                        frame.leftShoulder, frame.rightShoulder,
+                        frame.leftElbow, frame.rightElbow,
+                        frame.leftWrist, frame.rightWrist,
+                        frame.leftHip, frame.rightHip,
+                        frame.leftKnee, frame.rightKnee,
+                        frame.leftAnkle, frame.rightAnkle
+                    )
+                    if (joints.isEmpty()) 0f
+                    else joints.map { it.inFrameLikelihood }.average().toFloat()
+                } ?: 0f
             }
         }
 

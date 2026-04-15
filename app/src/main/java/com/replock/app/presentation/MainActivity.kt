@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
             val feedback     by viewModel.feedback.collectAsStateWithLifecycle()
             val frameWidth   by viewModel.frameWidth.collectAsStateWithLifecycle()
             val frameHeight  by viewModel.frameHeight.collectAsStateWithLifecycle()
+            val isDebugMode  by viewModel.isDebugMode.collectAsStateWithLifecycle()
+            val trackingQuality by viewModel.trackingQuality.collectAsStateWithLifecycle()
 
             val context = LocalContext.current
             var hasCameraPermission by remember {
@@ -64,6 +66,8 @@ class MainActivity : ComponentActivity() {
                 feedback             = feedback,
                 frameWidth           = frameWidth,
                 frameHeight          = frameHeight,
+                isDebugMode          = isDebugMode,
+                trackingQuality      = trackingQuality,
                 imageAnalysisUseCase = if (isActive && hasCameraPermission)
                                            viewModel.imageAnalysisUseCase else null,
                 onStartStop = {
@@ -78,7 +82,8 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 onQuit   = { viewModel.stopSession(); isActive = false },
-                onUnlock = { /* OverlayController.dismiss() */ }
+                onUnlock = { /* OverlayController.dismiss() */ },
+                onToggleDebug = { viewModel.toggleDebugMode() }
             )
         }
     }

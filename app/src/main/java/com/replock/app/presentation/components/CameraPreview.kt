@@ -57,7 +57,9 @@ fun CameraPreview(
     isFormValid: Boolean = false,
     feedback: String = "",
     frameWidth: Int = 1,
-    frameHeight: Int = 1
+    frameHeight: Int = 1,
+    isDebugMode: Boolean = false,
+    trackingQuality: Float = 0f
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "cam_anim")
 
@@ -236,6 +238,19 @@ fun CameraPreview(
                 )
             }
         }
+
+        // ── Debug Overlay ───────────────────────────────────────────────────
+        if (isActive && isDebugMode) {
+            DebugOverlay(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp),
+                trackingQuality = trackingQuality,
+                currentFrame = currentFrame,
+                isFormValid = isFormValid,
+                repState = repState
+            )
+        }
     }
 }
 
@@ -390,6 +405,78 @@ private fun LiveCameraFeed(
         modifier = modifier.clip(RoundedCornerShape(20.dp))
     )
 }
+
+@Composable
+private fun DebugOverlay(
+    modifier: Modifier = Modifier,
+    trackingQuality: Float = 0f,
+    currentFrame: LandmarkFrame? = null,
+    isFormValid: Boolean = false,
+    repState: String = ""
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.75f))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        Text(
+            text = "DEBUG",
+            color = AccentCyan,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        val qualityPercent = (trackingQuality * 100).toInt()
+        val qualityColor = when {
+            qualityPercent >= 70 -> AccentGreen
+            qualityPercent >= 40 -> AccentAmber
+            else -> ColorDanger
+        }
+        Text(
+            text = "Quality: $qualityPercent%",
+            color = qualityColor,
+            fontSize = 11.sp
+        )
+        Text(
+            text = "Form: ${if (isFormValid) "OK" else "BAD"}",
+            color = if (isFormValid) AccentGreen else ColorDanger,
+            fontSize = 11.sp
+        )
+        Text(
+            text = "State: $repState",
+            color = AccentCyan,
+            fontSize = 11.sp
+        )
+
+        if (currentFrame != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Joints:",
+                color = TextMuted,
+                fontSize = 9.sp
+            )
+            val joints = listOfNotNull(
+                currentFrame.leftElbow,
+                currentFrame.leftWrist,
+                currentFrame.leftShoulder
+            )
+            joints.take(3).forEach { joint ->
+                val conf = (joint.inFrameLikelihood * 100).toInt()
+                Text(
+                    text = "  ${conf}%",
+                    color = if (conf > 50) AccentGreen else ColorDanger,
+                    fontSize = 9.sp
+                )
+            }
+        }
+    }
+}
+
+private val ColorDanger = Color(0xFFFF4757)
+private val AccentAmber = Color(0xFFFFB74D)
 
 @Composable
 private fun PlaceholderGrid(modifier: Modifier) {

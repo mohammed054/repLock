@@ -69,7 +69,10 @@ fun LockScreen(
     isFormValid  : Boolean = false,
     feedback     : String = "",
     frameWidth   : Int    = 1,
-    frameHeight  : Int    = 1
+    frameHeight  : Int    = 1,
+    isDebugMode  : Boolean = false,
+    trackingQuality: Float = 0f,
+    onToggleDebug: () -> Unit = {}
 ) {
     val progress = (repCount.toFloat() / targetReps).coerceIn(0f, 1f)
 
@@ -127,7 +130,27 @@ fun LockScreen(
             // Time display (thin, lock-screen style)
             ClockDisplay()
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Debug toggle button (only visible in debug mode or always visible)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = onToggleDebug,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    Text(
+                        text = if (isDebugMode) "DEBUG: ON" else "DEBUG: OFF",
+                        color = if (isDebugMode) ColorAccentGreen else ColorTextMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.W500
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             // App branding row
             BrandingRow(isUnlocked = isUnlocked)
@@ -158,7 +181,9 @@ fun LockScreen(
                 isFormValid  = isFormValid,
                 feedback     = feedback,
                 frameWidth   = frameWidth,
-                frameHeight  = frameHeight
+                frameHeight  = frameHeight,
+                isDebugMode  = isDebugMode,
+                trackingQuality = trackingQuality
             )
 
             Spacer(modifier = Modifier.height(24.dp))
