@@ -12,6 +12,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Flip
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -59,7 +62,10 @@ fun CameraPreview(
     frameWidth: Int = 1,
     frameHeight: Int = 1,
     isDebugMode: Boolean = false,
-    trackingQuality: Float = 0f
+    trackingQuality: Float = 0f,
+    cameraFacing: CameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA,
+    onFlipCamera: () -> Unit = {},
+    onToggleOrientation: () -> Unit = {}
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "cam_anim")
 
@@ -92,7 +98,8 @@ fun CameraPreview(
         if (isActive) {
             LiveCameraFeed(
                 modifier = Modifier.fillMaxSize(),
-                imageAnalysisUseCase = imageAnalysisUseCase
+                imageAnalysisUseCase = imageAnalysisUseCase,
+                cameraFacing = cameraFacing
             )
         } else {
             PlaceholderGrid(modifier = Modifier.fillMaxSize())
@@ -148,6 +155,17 @@ fun CameraPreview(
                     drawLine(bracketColor, Offset(size.width - p, size.height - p), Offset(size.width - p, size.height - p - len), strokeWidth = sw, cap = StrokeCap.Square)
                 }
         )
+
+        // Camera controls (top-left)
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 12.dp, start = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CameraControlBtn(Icons.Default.Flip, "FLIP", onFlipCamera, AccentCyan)
+            CameraControlBtn(Icons.Default.ScreenRotation, "ROTATE", onToggleOrientation, AccentPrimary)
+        }
 
         // Live / Standby badge (top-right)
         Row(
@@ -395,13 +413,14 @@ private fun SkeletonOverlay(
 @Composable
 private fun LiveCameraFeed(
     modifier: Modifier,
-    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null,
+    cameraFacing: CameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 ) {
     val context        = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView    = remember { PreviewView(context) }
 
-    LaunchedEffect(imageAnalysisUseCase) {
+    LaunchedEffect(imageAnalysisUseCase, cameraFacing) {
         val provider = ProcessCameraProvider.getInstance(context).get()
         val preview  = Preview.Builder().build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
@@ -410,14 +429,14 @@ private fun LiveCameraFeed(
         if (imageAnalysisUseCase != null) {
             provider.bindToLifecycle(
                 lifecycleOwner,
-                CameraSelector.DEFAULT_FRONT_CAMERA,
+                cameraFacing,
                 preview,
                 imageAnalysisUseCase
             )
         } else {
             provider.bindToLifecycle(
                 lifecycleOwner,
-                CameraSelector.DEFAULT_FRONT_CAMERA,
+                cameraFacing,
                 preview
             )
         }
@@ -500,6 +519,25 @@ private fun DebugOverlay(
 
 private val ColorDanger = Color(0xFFFF4757)
 private val AccentAmber = Color(0xFFFFB74D)
+
+@Composable
+private fun CameraControlBtn(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    tint: Color
+) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, label, tint = tint, modifier = Modifier.size(17.dp))
+    }
+}
 
 @Composable
 private fun PlaceholderGrid(modifier: Modifier) {

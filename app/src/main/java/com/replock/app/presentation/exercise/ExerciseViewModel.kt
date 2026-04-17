@@ -1,5 +1,6 @@
 package com.replock.app.presentation.exercise
 
+import androidx.camera.core.CameraSelector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.replock.app.data.Difficulty
@@ -25,12 +26,11 @@ class ExerciseViewModel(
             return _poseDetector!!
         }
 
-    private val countPushUpUseCase by lazy { 
-        CountPushUpUseCase(difficulty = difficulty) 
+    private val countPushUpUseCase by lazy {
+        CountPushUpUseCase(difficulty = difficulty)
     }
 
     private val soundManager = SoundManager()
-    private var lastRepCount = 0
 
     private val _repCount = MutableStateFlow(0)
     val repCount: StateFlow<Int> = _repCount.asStateFlow()
@@ -68,11 +68,28 @@ class ExerciseViewModel(
     private val _trackingQuality = MutableStateFlow(0f)
     val trackingQuality: StateFlow<Float> = _trackingQuality.asStateFlow()
 
+    private val _cameraFacing = MutableStateFlow(CameraSelector.DEFAULT_FRONT_CAMERA)
+    val cameraFacing: StateFlow<CameraSelector> = _cameraFacing.asStateFlow()
+
+    private val _isLandscape = MutableStateFlow(false)
+    val isLandscape: StateFlow<Boolean> = _isLandscape.asStateFlow()
+
     private var collectionJob: Job? = null
     private var timerJob: Job? = null
 
     val imageAnalysisUseCase: androidx.camera.core.ImageAnalysis
         get() = poseDetector.imageAnalysisUseCase
+
+    fun flipCamera() {
+        _cameraFacing.value = if (_cameraFacing.value == CameraSelector.DEFAULT_FRONT_CAMERA)
+            CameraSelector.DEFAULT_BACK_CAMERA
+        else
+            CameraSelector.DEFAULT_FRONT_CAMERA
+    }
+
+    fun toggleOrientation() {
+        _isLandscape.value = !_isLandscape.value
+    }
 
     fun toggleDebugMode() {
         _isDebugMode.value = !_isDebugMode.value
