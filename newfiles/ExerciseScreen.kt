@@ -39,6 +39,7 @@ fun ExerciseScreen(
     repCount    : Int     = 0,
     targetReps  : Int     = 20,
     isActive    : Boolean = true,
+    isCameraReady: Boolean = false,
     repState    : String  = "WAITING",
     elapsedSecs : Long    = 0L,
     onStop      : () -> Unit = {},
@@ -56,7 +57,6 @@ fun ExerciseScreen(
     onFlipCamera  : () -> Unit = {},
     onToggleOrientation: () -> Unit = {}
 ) {
-    // ── Haptic on every new rep ───────────────────────────────────────────────
     val view = LocalView.current
     LaunchedEffect(repCount) {
         if (repCount > 0) {
@@ -65,7 +65,6 @@ fun ExerciseScreen(
         }
     }
 
-    // ── Rep-count scale burst ─────────────────────────────────────────────────
     val repBurstScale = remember { Animatable(1f) }
     LaunchedEffect(repCount) {
         if (repCount > 0) {
@@ -80,7 +79,6 @@ fun ExerciseScreen(
         }
     }
 
-    // ── Full-screen green flash on goal completion ────────────────────────────
     val goalFlashAlpha = remember { Animatable(0f) }
     var goalFlashFired by remember { mutableStateOf(false) }
     LaunchedEffect(repCount, targetReps) {
@@ -97,26 +95,26 @@ fun ExerciseScreen(
             .background(ColorBg)
             .statusBarsPadding()
     ) {
-        // ── Camera feed ───────────────────────────────────────────────────────
+        // ── Camera feed ───────────────────────────────────────────────────
         CameraPreview(
-            modifier = Modifier.fillMaxSize(),
-            isActive = isActive,
-            isCameraReady = isCameraReady,
-            repState = repState,
+            modifier             = Modifier.fillMaxSize(),
+            isActive             = isActive,
+            isCameraReady        = isCameraReady,
+            repState             = repState,
             imageAnalysisUseCase = imageAnalysisUseCase,
-            currentFrame    = currentFrame,
-            isFormValid     = isFormValid,
-            feedback        = feedback,
-            frameWidth      = frameWidth,
-            frameHeight     = frameHeight,
-            isDebugMode     = isDebugMode,
-            trackingQuality = trackingQuality,
-            cameraFacing    = cameraFacing,
-            onFlipCamera    = onFlipCamera,
-            onToggleOrientation = onToggleOrientation
+            currentFrame         = currentFrame,
+            isFormValid          = isFormValid,
+            feedback             = feedback,
+            frameWidth           = frameWidth,
+            frameHeight          = frameHeight,
+            isDebugMode          = isDebugMode,
+            trackingQuality      = trackingQuality,
+            cameraFacing         = cameraFacing,
+            onFlipCamera         = onFlipCamera,
+            onToggleOrientation  = onToggleOrientation
         )
 
-        // ── Bottom scrim ──────────────────────────────────────────────────────
+        // ── Bottom scrim ──────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -129,7 +127,7 @@ fun ExerciseScreen(
                 )
         )
 
-        // ── Goal flash overlay ────────────────────────────────────────────────
+        // ── Goal flash overlay ────────────────────────────────────────────
         if (goalFlashAlpha.value > 0f) {
             Box(
                 modifier = Modifier
@@ -138,7 +136,7 @@ fun ExerciseScreen(
             )
         }
 
-        // ── Top bar ───────────────────────────────────────────────────────────
+        // ── Top bar ───────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -231,15 +229,18 @@ fun ExerciseScreen(
             }
         }
 
-        // ── Bottom panel: counter + stats ─────────────────────────────────────
+        // ── Bottom panel ──────────────────────────────────────────────────
+        // Phase 4.1 fix: the FloatingStopButton is now INSIDE this Column,
+        // centred above the stat cards. It can no longer overlap ELAPSED.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
+                .padding(bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Rep counter widget
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -252,23 +253,26 @@ fun ExerciseScreen(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
 
+            // ── Floating START / END button — centred, no longer absolute ──
+            FloatingStopButton(
+                isActive = isActive,
+                onClick  = onStop
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── Three equal-width stat cards ──────────────────────────────
+            // Phase 4.1 fix: each card gets Modifier.weight(1f) in a Row so
+            // they share the width equally and no card text is ever clipped.
             StatRow(
                 repCount    = repCount,
                 targetReps  = targetReps,
-                elapsedSecs = elapsedSecs
+                elapsedSecs = elapsedSecs,
+                modifier    = Modifier.fillMaxWidth()
             )
         }
-
-        // ── Floating stop/start button ────────────────────────────────────────
-        FloatingStopButton(
-            isActive = isActive,
-            onClick  = onStop,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 32.dp)
-        )
     }
 }
 
@@ -317,10 +321,15 @@ private fun FloatingStopButton(
 }
 
 @Composable
-private fun StatRow(repCount: Int, targetReps: Int, elapsedSecs: Long) {
+private fun StatRow(
+    repCount: Int,
+    targetReps: Int,
+    elapsedSecs: Long,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier              = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        modifier              = modifier,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         StatCard(
             label    = "PACE",
@@ -356,7 +365,7 @@ private fun StatCard(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(ColorCard)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -364,7 +373,8 @@ private fun StatCard(
             color         = ColorTextMuted,
             fontSize      = 8.sp,
             fontWeight    = FontWeight.W600,
-            letterSpacing = 1.sp
+            letterSpacing = 1.sp,
+            maxLines      = 1
         )
         Spacer(Modifier.height(4.dp))
         Text(
@@ -372,13 +382,13 @@ private fun StatCard(
             color         = accent,
             fontSize      = 16.sp,
             fontWeight    = FontWeight.W700,
-            letterSpacing = (-0.5).sp
+            letterSpacing = (-0.5).sp,
+            maxLines      = 1
         )
     }
 }
 
 private fun formatElapsed(secs: Long): String {
-    val m = secs / 60
-    val s = secs % 60
+    val m = secs / 60; val s = secs % 60
     return "%02d:%02d".format(m, s)
 }

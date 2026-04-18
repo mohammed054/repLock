@@ -32,8 +32,9 @@ class ExerciseViewModel(
 
     private val soundManager = SoundManager()
 
-    /** Set externally from the UI layer via the sound preference. */
     var soundEnabled: Boolean = true
+
+    // ── Public state ──────────────────────────────────────────────────────────
 
     private val _repCount = MutableStateFlow(0)
     val repCount: StateFlow<Int> = _repCount.asStateFlow()
@@ -71,6 +72,7 @@ class ExerciseViewModel(
     private val _trackingQuality = MutableStateFlow(0f)
     val trackingQuality: StateFlow<Float> = _trackingQuality.asStateFlow()
 
+    // Persisted across sessions so a flip survives stop/start (Phase 4.2).
     private val _cameraFacing = MutableStateFlow(CameraSelector.DEFAULT_FRONT_CAMERA)
     val cameraFacing: StateFlow<CameraSelector> = _cameraFacing.asStateFlow()
 
@@ -79,34 +81,37 @@ class ExerciseViewModel(
 
     /**
      * True once the very first raw camera frame arrives after [startSession].
-     * The UI uses this to drop the "TAP START TO ACTIVATE" placeholder (Phase 4.4).
+     * The UI uses this to drop the "TAP START TO ACTIVATE" placeholder as soon
+     * as real pixels appear — not just when a button is pressed (Phase 4.4).
      */
     private val _isCameraReady = MutableStateFlow(false)
     val isCameraReady: StateFlow<Boolean> = _isCameraReady.asStateFlow()
 
-    private var collectionJob: Job? = null
-    private var cameraReadyJob: Job? = null
-    private var timerJob: Job? = null
+    // ── Internal jobs ─────────────────────────────────────────────────────────
+
+    private var collectionJob: Job?   = null
+    private var cameraReadyJob: Job?  = null
+    private var timerJob: Job?        = null
 
     val imageAnalysisUseCase: androidx.camera.core.ImageAnalysis
         get() = poseDetector.imageAnalysisUseCase
 
+    // ── Public actions ────────────────────────────────────────────────────────
+
     fun flipCamera() {
-        _cameraFacing.value = if (_cameraFacing.value == CameraSelector.DEFAULT_FRONT_CAMERA)
-            CameraSelector.DEFAULT_BACK_CAMERA
-        else
-            CameraSelector.DEFAULT_FRONT_CAMERA
+        _cameraFacing.value =
+            if (_cameraFacing.value == CameraSelector.DEFAULT_FRONT_CAMERA)
+                CameraSelector.DEFAULT_BACK_CAMERA
+            else
+                CameraSelector.DEFAULT_FRONT_CAMERA
+        // NOTE: LiveCameraFeed observes cameraFacing and rebinds automatically.
+        // No extra work needed here.
     }
 
-    fun toggleOrientation() {
-        _isLandscape.value = !_isLandscape.value
-    }
+    fun toggleOrientation() { _isLandscape.value = !_isLandscape.value }
+    fun toggleDebugMode()    { _isDebugMode.value = !_isDebugMode.value }
 
-    fun toggleDebugMode() {
-        _isDebugMode.value = !_isDebugMode.value
-    }
-
-fun startSession() {
+    fun startSession() {
         countPushUpUseCase.reset()
         _repCount.value    = 0
         _formScore.value   = 0
@@ -123,35 +128,33 @@ fun startSession() {
             }
         }
 
+        // Subscribe to processed pose results.
         collectionJob?.cancel()
         collectionJob = viewModelScope.launch {
             poseDetector.poseFlow.collect { poseResult ->
                 val r = countPushUpUseCase.process(poseResult)
 
-                val previousRepCount = _repCount.value
+                val prev = _repCount.value
                 _repCount.value = r.repCount
+                if (r.repCount > prev && soundEnabled) soundManager.playRepComplete()
 
-                if (r.repCount > previousRepCount && soundEnabled) {
-                    soundManager.playRepComplete()
-                }
-
-                _formScore.value = r.analysis.formScore
-                _feedback.value = r.analysis.feedback
-                _repState.value = r.analysis.phase
+                _formScore.value   = r.analysis.formScore
+                _feedback.value    = r.analysis.feedback
+                _repState.value    = r.analysis.phase
                 _currentFrame.value = r.frame
                 _isFormValid.value = r.analysis.goodForm
                 _poseDetected.value = r.analysis.poseDetected
-                _frameWidth.value = r.frameWidth
+                _frameWidth.value  = r.frameWidth
                 _frameHeight.value = r.frameHeight
 
                 _trackingQuality.value = r.frame?.let { frame ->
                     val joints = listOfNotNull(
                         frame.leftShoulder, frame.rightShoulder,
-                        frame.leftElbow, frame.rightElbow,
-                        frame.leftWrist, frame.rightWrist,
-                        frame.leftHip, frame.rightHip,
-                        frame.leftKnee, frame.rightKnee,
-                        frame.leftAnkle, frame.rightAnkle
+                        frame.leftElbow,    frame.rightElbow,
+                        frame.leftWrist,    frame.rightWrist,
+                        frame.leftHip,      frame.rightHip,
+                        frame.leftKnee,     frame.rightKnee,
+                        frame.leftAnkle,    frame.rightAnkle
                     )
                     if (joints.isEmpty()) 0f
                     else joints.map { it.inFrameLikelihood }.average().toFloat()
@@ -168,7 +171,7 @@ fun startSession() {
         }
     }
 
-fun stopSession() {
+    fun stopSession() {
         collectionJob?.cancel()
         cameraReadyJob?.cancel()
         timerJob?.cancel()
