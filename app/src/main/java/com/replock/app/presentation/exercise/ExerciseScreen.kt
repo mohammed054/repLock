@@ -1,5 +1,6 @@
 package com.replock.app.presentation.exercise
 
+import androidx.camera.core.CameraSelector
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -12,19 +13,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.presentation.components.CameraPreview
 import com.replock.app.presentation.components.RepCounterUI
 
-// ═══════════════════════════════════════════════════════════════════
-//  Design tokens
-// ═══════════════════════════════════════════════════════════════════
 private val ColorBg           = Color(0xFF07070B)
 private val ColorSurface      = Color(0xFF0F0F18)
 private val ColorCard         = Color(0xFF171722)
@@ -36,15 +32,6 @@ private val ColorAmber        = Color(0xFFFFB74D)
 private val ColorTextPrimary  = Color(0xFFF0F0FF)
 private val ColorTextMuted    = Color(0xFF5E5E78)
 
-// ═══════════════════════════════════════════════════════════════════
-//  ExerciseScreen
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Active workout screen — shown once the user taps Start.
- * Focused on maximum real-estate for the camera feed and an at-a-glance
- * rep counter. A floating bottom sheet surfaces session stats.
- */
 @Composable
 fun ExerciseScreen(
     repCount    : Int     = 0,
@@ -54,26 +41,41 @@ fun ExerciseScreen(
     elapsedSecs : Long    = 0L,
     onStop      : () -> Unit = {},
     onBack      : () -> Unit = {},
-    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null
+    imageAnalysisUseCase: androidx.camera.core.ImageAnalysis? = null,
+    currentFrame  : LandmarkFrame? = null,
+    isFormValid   : Boolean = false,
+    feedback      : String = "",
+    frameWidth    : Int = 1,
+    frameHeight   : Int = 1,
+    isDebugMode   : Boolean = false,
+    trackingQuality: Float = 0f,
+    cameraFacing  : CameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA,
+    onFlipCamera  : () -> Unit = {},
+    onToggleOrientation: () -> Unit = {}
 ) {
-    val progress = (repCount.toFloat() / targetReps).coerceIn(0f, 1f)
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(ColorBg)
             .statusBarsPadding()
     ) {
-
-        // ── Camera takes all the vertical space ─────────────────────
         CameraPreview(
             modifier = Modifier.fillMaxSize(),
             isActive = isActive,
             repState = repState,
-            imageAnalysisUseCase = imageAnalysisUseCase
+            imageAnalysisUseCase = imageAnalysisUseCase,
+            currentFrame    = currentFrame,
+            isFormValid     = isFormValid,
+            feedback        = feedback,
+            frameWidth      = frameWidth,
+            frameHeight     = frameHeight,
+            isDebugMode     = isDebugMode,
+            trackingQuality = trackingQuality,
+            cameraFacing    = cameraFacing,
+            onFlipCamera    = onFlipCamera,
+            onToggleOrientation = onToggleOrientation
         )
 
-        // ── Dimmed gradient overlay at bottom ───────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -86,7 +88,6 @@ fun ExerciseScreen(
                 )
         )
 
-        // ── Top bar ─────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -104,7 +105,6 @@ fun ExerciseScreen(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = ColorTextPrimary, modifier = Modifier.size(18.dp))
             }
 
-            // Session timer
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
@@ -128,7 +128,6 @@ fun ExerciseScreen(
                 )
             }
 
-            // Reps badge (quick glance)
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
@@ -154,7 +153,6 @@ fun ExerciseScreen(
             }
         }
 
-        // ── Bottom panel ─────────────────────────────────────────────
         Column(
             modifier            = Modifier
                 .fillMaxWidth()
@@ -171,12 +169,10 @@ fun ExerciseScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Stat row
             StatRow(repCount = repCount, targetReps = targetReps, elapsedSecs = elapsedSecs)
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Stop button
             Button(
                 onClick  = onStop,
                 modifier = Modifier
@@ -203,8 +199,6 @@ fun ExerciseScreen(
     }
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
 @Composable
 private fun StatRow(repCount: Int, targetReps: Int, elapsedSecs: Long) {
     Row(
@@ -214,8 +208,7 @@ private fun StatRow(repCount: Int, targetReps: Int, elapsedSecs: Long) {
         StatCard(
             label   = "PACE",
             value   = if (elapsedSecs > 0 && repCount > 0) {
-                val repsPerMin = repCount / (elapsedSecs / 60.0)
-                String.format("%.1f /m", repsPerMin)
+                String.format("%.1f /m", repCount / (elapsedSecs / 60.0))
             } else "—",
             accent  = ColorAccentCyan,
             modifier = Modifier.weight(1f)

@@ -7,6 +7,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseDetector as MLKitPoseDetector
+import com.google.mlkit.vision.pose.PoseLandmark
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -60,7 +61,12 @@ class PoseDetector {
 
         detector.process(input)
             .addOnSuccessListener { pose ->
-                if (pose.allPoseLandmarks.isNotEmpty()) {
+                val hasBody = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
+                    ?.inFrameLikelihood?.let { it >= 0.4f } == true ||
+                        pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+                    ?.inFrameLikelihood?.let { it >= 0.4f } == true
+
+                if (hasBody && pose.allPoseLandmarks.isNotEmpty()) {
                     channel.trySend(Result(pose, width, height))
                 }
             }
