@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.replock.app.data.Difficulty
 import com.replock.app.system.notification.ReminderScheduler
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import kotlin.math.PI
 import kotlin.math.cos
@@ -109,23 +112,23 @@ fun OnboardingScreen(onProgramSelected: (Difficulty) -> Unit) {
 
     LaunchedEffect(Unit) {
         // Header slides in first
-        kotlinx.coroutines.coroutineScope {
+        coroutineScope {
             launch { headerOffset.animateTo(0f, tween(460, easing = FastOutSlowInEasing)) }
             launch { headerAlpha.animateTo(1f,  tween(380)) }
         }
         // Cards stagger in 80 ms apart
         Difficulty.ALL.indices.forEach { i ->
-            kotlinx.coroutines.launch {
-                kotlinx.coroutines.delay(i * 85L)
-                kotlinx.coroutines.coroutineScope {
+            launch {
+                delay(i * 85L)
+                coroutineScope {
                     launch { cardOffsets[i].animateTo(0f, tween(430, easing = FastOutSlowInEasing)) }
                     launch { cardAlphas[i].animateTo(1f,  tween(380)) }
                 }
             }
         }
         // Button after the last card
-        kotlinx.coroutines.delay(Difficulty.ALL.size * 85L + 120L)
-        kotlinx.coroutines.coroutineScope {
+        delay(Difficulty.ALL.size * 85L + 120L)
+        coroutineScope {
             launch { btnOffset.animateTo(0f, tween(380, easing = FastOutSlowInEasing)) }
             launch { btnAlpha.animateTo(1f,  tween(340)) }
         }
