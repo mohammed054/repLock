@@ -32,6 +32,9 @@ class ExerciseViewModel(
 
     private val soundManager = SoundManager()
 
+    /** Set externally from the UI layer via the sound preference. */
+    var soundEnabled: Boolean = true
+
     private val _repCount = MutableStateFlow(0)
     val repCount: StateFlow<Int> = _repCount.asStateFlow()
 
@@ -111,7 +114,7 @@ class ExerciseViewModel(
                 val previousRepCount = _repCount.value
                 _repCount.value = r.repCount
 
-                if (r.repCount > previousRepCount) {
+                if (r.repCount > previousRepCount && soundEnabled) {
                     soundManager.playRepComplete()
                 }
 

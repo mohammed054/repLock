@@ -24,15 +24,18 @@ import com.replock.app.presentation.exercise.ExerciseScreen
 import com.replock.app.presentation.exercise.ExerciseViewModel
 import com.replock.app.presentation.onboarding.OnboardingScreen
 import com.replock.app.presentation.onboarding.getSavedDifficulty
+import com.replock.app.presentation.settings.SettingsScreen
+import com.replock.app.presentation.settings.isSoundEnabled
+import com.replock.app.system.notification.ReminderScheduler
+
+private enum class Screen { EXERCISE, SETTINGS }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableEdgeToEdge()
-        setContent {
-            RepLockApp()
-        }
+        setContent { RepLockApp() }
     }
 }
 
@@ -40,6 +43,7 @@ class MainActivity : ComponentActivity() {
 private fun RepLockApp() {
     val context = LocalContext.current
     var currentDifficulty by remember { mutableStateOf(context.getSavedDifficulty()) }
+    var currentScreen     by remember { mutableStateOf(Screen.EXERCISE) }
 
     Box(
         modifier = Modifier
@@ -53,14 +57,32 @@ private fun RepLockApp() {
                 }
             )
         } else {
-            WorkoutRoot(difficulty = currentDifficulty!!)
+            when (currentScreen) {
+                Screen.EXERCISE -> WorkoutRoot(
+                    difficulty     = currentDifficulty!!,
+                    onOpenSettings = { currentScreen = Screen.SETTINGS }
+                )
+                Screen.SETTINGS -> SettingsScreen(
+                    onBack          = { currentScreen = Screen.EXERCISE },
+                    onChangeProgram = {
+                        // Wipe the saved program so OnboardingScreen shows again.
+                        // The 7-day gate is enforced inside OnboardingScreen/canChangeDifficulty.
+                        currentDifficulty = null
+                        currentScreen     = Screen.EXERCISE
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun WorkoutRoot(difficulty: Difficulty) {
-    val viewModel: ExerciseViewModel = viewModel()
+private fun WorkoutRoot(
+    difficulty     : Difficulty,
+    onOpenSettings : () -> Unit
+) {
+    val context   = LocalContext.current
+    val viewModel : ExerciseViewModel = viewModel()
 
     val repCount        by viewModel.repCount.collectAsStateWithLifecycle()
     val repState        by viewModel.repState.collectAsStateWithLifecycle()
@@ -74,7 +96,17 @@ private fun WorkoutRoot(difficulty: Difficulty) {
     val trackingQuality by viewModel.trackingQuality.collectAsStateWithLifecycle()
     val cameraFacing    by viewModel.cameraFacing.collectAsStateWithLifecycle()
 
-    val context = LocalContext.current
+    // Propagate sound-enabled preference into the ViewModel whenever it changes.
+    val soundEnabled by remember { derivedStateOf { context.isSoundEnabled() } }
+    LaunchedEffect(soundEnabled) { viewModel.soundEnabled = soundEnabled }
+
+    // When the daily goal is hit, suppress today's remaining reminders.
+    LaunchedEffect(repCount) {
+        if (repCount >= difficulty.targetReps && difficulty.targetReps > 0) {
+            ReminderScheduler.scheduleFromTomorrow(context)
+        }
+    }
+
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
@@ -106,6 +138,7 @@ private fun WorkoutRoot(difficulty: Difficulty) {
         cameraFacing         = cameraFacing,
         onFlipCamera         = { viewModel.flipCamera() },
         onToggleOrientation  = { viewModel.toggleOrientation() },
+        onOpenSettings       = onOpenSettings,
         imageAnalysisUseCase = if (isActive && hasCameraPermission)
                                    viewModel.imageAnalysisUseCase else null,
         onStop = {

@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Camera & foreground service -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+
+    <!-- Reminder notifications -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -30,6 +34,7 @@
             </intent-filter>
         </activity>
 
+        <!-- Foreground lock service -->
         <service
             android:name=".system.service.LockForegroundService"
             android:exported="false"
@@ -39,6 +44,7 @@
                 android:value="workout_lock" />
         </service>
 
+        <!-- Accessibility service -->
         <service
             android:name=".system.service.RepLockAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -51,6 +57,20 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-</application>
+        <!-- Reminder notification receiver -->
+        <receiver
+            android:name=".system.notification.ReminderReceiver"
+            android:exported="false" />
+
+        <!-- Re-schedules alarms after device reboot -->
+        <receiver
+            android:name=".system.notification.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
 
 </manifest>
