@@ -80,23 +80,34 @@ private fun WorkoutRoot(
     val context   = LocalContext.current
     val viewModel : ExerciseViewModel = viewModel()
 
-    val repCount        by viewModel.repCount.collectAsStateWithLifecycle()
-    val repState        by viewModel.repState.collectAsStateWithLifecycle()
-    val elapsedSecs     by viewModel.elapsedSecs.collectAsStateWithLifecycle()
-    val currentFrame    by viewModel.currentFrame.collectAsStateWithLifecycle()
-    val isFormValid     by viewModel.isFormValid.collectAsStateWithLifecycle()
-    val feedback        by viewModel.feedback.collectAsStateWithLifecycle()
-    val frameWidth      by viewModel.frameWidth.collectAsStateWithLifecycle()
-    val frameHeight     by viewModel.frameHeight.collectAsStateWithLifecycle()
-    val isDebugMode     by viewModel.isDebugMode.collectAsStateWithLifecycle()
-    val trackingQuality by viewModel.trackingQuality.collectAsStateWithLifecycle()
-    val cameraFacing    by viewModel.cameraFacing.collectAsStateWithLifecycle()
-    // Phase 4.4 — hides "TAP START TO ACTIVATE" when first camera frame arrives.
-    val isCameraReady   by viewModel.isCameraReady.collectAsStateWithLifecycle()
+    // ── Collect all ViewModel state ──────────────────────────────────────────
+    val repCount         by viewModel.repCount.collectAsStateWithLifecycle()
+    val completedSetReps by viewModel.completedSetReps.collectAsStateWithLifecycle()
+    val sessionState     by viewModel.sessionState.collectAsStateWithLifecycle()
+    val repState         by viewModel.repState.collectAsStateWithLifecycle()
+    val elapsedSecs      by viewModel.elapsedSecs.collectAsStateWithLifecycle()
+    val currentFrame     by viewModel.currentFrame.collectAsStateWithLifecycle()
+    val isFormValid      by viewModel.isFormValid.collectAsStateWithLifecycle()
+    val feedback         by viewModel.feedback.collectAsStateWithLifecycle()
+    val frameWidth       by viewModel.frameWidth.collectAsStateWithLifecycle()
+    val frameHeight      by viewModel.frameHeight.collectAsStateWithLifecycle()
+    val isDebugMode      by viewModel.isDebugMode.collectAsStateWithLifecycle()
+    val trackingQuality  by viewModel.trackingQuality.collectAsStateWithLifecycle()
+    val cameraFacing     by viewModel.cameraFacing.collectAsStateWithLifecycle()
+    val isCameraReady    by viewModel.isCameraReady.collectAsStateWithLifecycle()
 
+    // Phase 5.3 — PB state
+    val personalBest     by viewModel.personalBest.collectAsStateWithLifecycle()
+    val isNewPb          by viewModel.isNewPb.collectAsStateWithLifecycle()
+
+    // Phase 5.2 — READY flash
+    val readyFlash       by viewModel.readyFlash.collectAsStateWithLifecycle()
+
+    // Propagate sound preference
     val soundEnabled by remember { derivedStateOf { context.isSoundEnabled() } }
     LaunchedEffect(soundEnabled) { viewModel.soundEnabled = soundEnabled }
 
+    // Cancel today's reminders when goal is met
     LaunchedEffect(repCount) {
         if (repCount >= difficulty.targetReps && difficulty.targetReps > 0) {
             ReminderScheduler.scheduleFromTomorrow(context)
@@ -119,12 +130,21 @@ private fun WorkoutRoot(
     }
 
     ExerciseScreen(
+        // Rep state — Phase 5.4: targetReps from difficulty (config-driven)
         repCount             = repCount,
         targetReps           = difficulty.targetReps,
+        completedSetReps     = completedSetReps,
+        sessionState         = sessionState,
         isActive             = isActive && hasCameraPermission,
         isCameraReady        = isCameraReady,
         repState             = repState,
         elapsedSecs          = elapsedSecs,
+        // PB — Phase 5.3
+        personalBest         = personalBest,
+        isNewPb              = isNewPb,
+        // READY flash — Phase 5.2
+        readyFlash           = readyFlash,
+        // Camera
         currentFrame         = currentFrame,
         isFormValid          = isFormValid,
         feedback             = feedback,
@@ -138,11 +158,10 @@ private fun WorkoutRoot(
         onOpenSettings       = onOpenSettings,
         imageAnalysisUseCase = if (isActive && hasCameraPermission)
                                    viewModel.imageAnalysisUseCase else null,
+        onDismissSet         = { viewModel.resetAfterSet() },
         onStop = {
-            if (isActive) {
-                viewModel.stopSession()
-                isActive = false
-            } else {
+            if (isActive) { viewModel.stopSession(); isActive = false }
+            else {
                 if (hasCameraPermission) { viewModel.startSession(); isActive = true }
                 else launcher.launch(Manifest.permission.CAMERA)
             }
