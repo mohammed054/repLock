@@ -1,6 +1,7 @@
 package com.replock.app.ml.pose
 
 import android.annotation.SuppressLint
+import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
@@ -13,6 +14,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class PoseDetector {
 
@@ -32,10 +34,11 @@ class PoseDetector {
     private val executor = Executors.newSingleThreadExecutor()
     private val channel = Channel<Result>(Channel.CONFLATED)
     private val cameraReadyChannel = Channel<Unit>(Channel.CONFLATED)
+    
+    // Ensures we only notify that the camera is "ready" once
+    private val isCameraReadyEmitted = AtomicBoolean(false)
 
     val poseFlow: Flow<Result> = channel.receiveAsFlow()
-
-    /** Emits once when the first camera frame is processed (Phase 4.4) */
     val cameraReadyFlow: Flow<Unit> = cameraReadyChannel.receiveAsFlow()
 
     val imageAnalysisUseCase: ImageAnalysis =
@@ -47,6 +50,7 @@ class PoseDetector {
             }
 
     fun close() {
+        // Stop accepting new frames first
         imageAnalysisUseCase.clearAnalyzer()
         detector.close()
         channel.close()
@@ -56,7 +60,11 @@ class PoseDetector {
 
     @SuppressLint("UnsafeOptInUsageError")
     private fun analyze(proxy: ImageProxy) {
-        val image = proxy.image ?: return proxy.close()
+        val image = proxy.image 
+        if (image == null) {
+            proxy.close()
+            return
+        }
 
         val rotation = proxy.imageInfo.rotationDegrees
         val width = if (rotation % 180 == 0) proxy.width else proxy.height
@@ -66,19 +74,27 @@ class PoseDetector {
 
         detector.process(input)
             .addOnSuccessListener { pose ->
-                // Emit camera ready on first frame
-                cameraReadyChannel.trySend(Unit)
+                // Emit camera ready ONLY once
+                if (isCameraReadyEmitted.compareAndSet(false, true)) {
+                    cameraReadyChannel.trySend(Unit)
+                }
                 
-                val hasBody = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
-                    ?.inFrameLikelihood?.let { it >= 0.4f } == true ||
-                        pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
-                    ?.inFrameLikelihood?.let { it >= 0.4f } == true
+                // Logic check for body presence
+                val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
+                val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+                
+                val hasBody = (leftHip?.inFrameLikelihood ?: 0f) >= 0.4f ||
+                              (rightHip?.inFrameLikelihood ?: 0f) >= 0.4f
 
                 if (hasBody && pose.allPoseLandmarks.isNotEmpty()) {
                     channel.trySend(Result(pose, width, height))
                 }
             }
+            .addOnFailureListener { e ->
+                Log.e("PoseDetector", "ML Kit processing failed", e)
+            }
             .addOnCompleteListener {
+                // Always close the proxy to allow the camera to get the next frame
                 proxy.close()
             }
     }
