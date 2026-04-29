@@ -36,7 +36,7 @@ private fun phaseLabel(repCount: Int, targetReps: Int): String {
         pct < 0.50f           -> "KEEP PUSHING"
         pct < 0.75f           -> "OVER HALFWAY"
         pct < 0.90f           -> "ALMOST THERE"
-        repCount >= targetReps -> "UNLOCKING DEVICE"
+        repCount >= targetReps -> "GOAL COMPLETE"
         else                  -> "FINAL PUSH"
     }
 }

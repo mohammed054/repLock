@@ -24,6 +24,7 @@ object PoseLandmarkMapper {
         }
 
         return LandmarkFrame(
+            nose = mapLandmark(PoseLandmark.NOSE),
             leftShoulder  = mapLandmark(PoseLandmark.LEFT_SHOULDER),
             rightShoulder = mapLandmark(PoseLandmark.RIGHT_SHOULDER),
             leftElbow     = mapLandmark(PoseLandmark.LEFT_ELBOW),

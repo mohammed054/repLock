@@ -1,16 +1,18 @@
 package com.replock.app.domain.usecase
 
 import com.replock.app.domain.model.Analysis
-import com.replock.app.data.Difficulty
+import com.replock.app.domain.model.ExerciseType
 import com.replock.app.ml.pose.LandmarkFrame
 import com.replock.app.ml.pose.PoseDetector
 import com.replock.app.ml.pose.PoseLandmarkMapper
 import com.replock.app.ml.pose.PoseProcessor
+import com.replock.app.ml.rep.ExerciseCounter
+import com.replock.app.ml.rep.PullUpCounter
 import com.replock.app.ml.rep.PushUpCounter
 
-class CountPushUpUseCase(
-    private val difficulty: Difficulty = Difficulty.MEDIUM,
-    private val counter: PushUpCounter = PushUpCounter(difficulty.strictness),
+class AnalyzeWorkoutUseCase(
+    private val exerciseType: ExerciseType,
+    private val strictness: Float = exerciseType.strictness,
     private val processor: PoseProcessor = PoseProcessor()
 ) {
 
@@ -22,13 +24,18 @@ class CountPushUpUseCase(
         val frameHeight: Int
     )
 
+    private val counter: ExerciseCounter = when (exerciseType) {
+        ExerciseType.PUSH_UP -> PushUpCounter(strictness)
+        ExerciseType.PULL_UP -> PullUpCounter(strictness)
+    }
+
     fun process(poseResult: PoseDetector.Result): Result {
         val processedFrame = processor.process(
             PoseLandmarkMapper.map(
-            poseResult.pose,
-            poseResult.width,
-            poseResult.height
-        )
+                pose = poseResult.pose,
+                imageWidth = poseResult.width,
+                imageHeight = poseResult.height
+            )
         )
         val analysis = counter.process(processedFrame)
 

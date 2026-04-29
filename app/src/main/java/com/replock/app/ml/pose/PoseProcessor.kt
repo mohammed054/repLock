@@ -5,13 +5,13 @@ class PoseProcessor {
     private val smoother = PoseSmoother(smoothingFactor = 0.4f)
 
     fun process(frame: LandmarkFrame): LandmarkFrame {
-        // Collect updated joints into a map for cleaner processing
-        val updatedJoints = frame.associate { (key, joint) ->
-            key to tracker.update(key, joint)?.joint
+        val updatedJoints = mutableMapOf<String, Joint?>()
+        frame.forEach { key, joint ->
+            updatedJoints[key] = tracker.update(key, joint)?.joint
         }
 
-        // Construct the frame using the map
         val rawFrame = LandmarkFrame(
+            nose = updatedJoints["nos"],
             leftShoulder = updatedJoints["lsh"],
             rightShoulder = updatedJoints["rsh"],
             leftElbow = updatedJoints["lel"],

@@ -6,12 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [UserProgressEntity::class],
-    version = 1,
+    entities = [UserProgressEntity::class, WorkoutSessionEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userProgressDao(): UserProgressDao
+    abstract fun sessionDao(): SessionDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null

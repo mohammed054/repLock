@@ -7,15 +7,13 @@ import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,8 +65,7 @@ fun CameraPreview(
     isDebugMode: Boolean = false,
     trackingQuality: Float = 0f,
     cameraFacing: CameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA,
-    onFlipCamera: () -> Unit = {},
-    onToggleOrientation: () -> Unit = {}
+    onFlipCamera: () -> Unit = {}
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "cam_anim")
 
@@ -169,11 +166,8 @@ fun CameraPreview(
                 .padding(top = 12.dp, start = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CameraControlBtn(Icons.Default.Flip, "FLIP", onFlipCamera, AccentCyan)
-            CameraControlBtn(Icons.Default.ScreenRotation, "ROTATE", onToggleOrientation, AccentPrimary)
+            CameraControlBtn(Icons.Default.Cameraswitch, "FLIP", onFlipCamera, AccentCyan)
         }
-
-        val liveNow = isActive && isCameraReady
 
         // Live / Standby badge (top-right)
         Row(

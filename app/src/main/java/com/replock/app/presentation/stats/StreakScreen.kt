@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -97,7 +97,7 @@ fun StreakScreen(viewModel: StreakViewModel, onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack, modifier = Modifier.size(40.dp).clip(CircleShape).background(ColorSurface)) {
-                        Icon(Icons.Default.ArrowBack, "Back", tint = ColorTextPrimary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = ColorTextPrimary, modifier = Modifier.size(18.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Text("STATS", color = ColorTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.W700, letterSpacing = 2.sp)

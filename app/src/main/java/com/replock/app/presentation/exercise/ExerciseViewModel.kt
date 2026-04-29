@@ -10,6 +10,7 @@ import com.replock.app.ml.pose.PoseDetector
 import com.replock.app.system.audio.SoundManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -1,274 +1,206 @@
 package com.replock.app.presentation.settings
 
-import android.content.Context
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.replock.app.presentation.onboarding.canChangeDifficulty
-import com.replock.app.presentation.onboarding.daysUntilChange
-import com.replock.app.system.notification.ReminderScheduler
+import com.replock.app.domain.model.ExerciseType
+import com.replock.app.presentation.SettingsState
+import com.replock.app.presentation.components.RepLockColors
+import com.replock.app.presentation.components.exerciseAccent
 
-// ── Shared preferences helpers ────────────────────────────────────────────────
-
-private const val PREFS_NAME      = "replock_prefs"
-private const val KEY_SOUND       = "sound_enabled"
-
-fun Context.isSoundEnabled(): Boolean =
-    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getBoolean(KEY_SOUND, true)
-
-fun Context.setSoundEnabled(enabled: Boolean) {
-    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_SOUND, enabled).apply()
-}
-
-// ── Theme ────────────────────────────────────────────────────────────────────
-
-private val ColorBg           = Color(0xFF07070B)
-private val ColorSurface      = Color(0xFF0F0F18)
-private val ColorCard         = Color(0xFF171722)
-private val ColorBorder       = Color(0xFF1E1E2E)
-private val ColorAccentPurple = Color(0xFF8B6FFF)
-private val ColorAccentCyan   = Color(0xFF29D9C2)
-private val ColorDanger       = Color(0xFFFF4757)
-private val ColorTextPrimary  = Color(0xFFF0F0FF)
-private val ColorTextMuted    = Color(0xFF5E5E78)
-
-// ── Frequency option model ────────────────────────────────────────────────────
-
-private data class FreqOption(val label: String, val hours: Int)
-
-private val FREQ_OPTIONS = listOf(
-    FreqOption("Every 2h", 2),
-    FreqOption("Every 3h", 3),
-    FreqOption("Every 6h", 6),
-    FreqOption("Off",       0)
-)
-
-// ── Screen ───────────────────────────────────────────────────────────────────
+private val reminderOptions = listOf(0, 2, 3, 6)
 
 @Composable
 fun SettingsScreen(
-    onBack          : () -> Unit,
-    onChangeProgram : () -> Unit
+    state: SettingsState,
+    selectedExercise: ExerciseType,
+    onSelectExercise: (ExerciseType) -> Unit,
+    onTargetRepsChange: (ExerciseType, Int) -> Unit,
+    onSoundEnabledChange: (Boolean) -> Unit,
+    onReminderIntervalChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val context      = LocalContext.current
-    val canChange    = remember { context.canChangeDifficulty() }
-    val daysLeft     = remember { context.daysUntilChange() }
-
-    var intervalHours by remember { mutableIntStateOf(ReminderScheduler.getIntervalHours(context)) }
-    var soundEnabled  by remember { mutableStateOf(context.isSoundEnabled()) }
-
-    Box(
-        modifier = Modifier
+    LazyColumn(
+        modifier = modifier
             .fillMaxSize()
-            .background(ColorBg)
-            .statusBarsPadding()
+            .background(RepLockColors.Background),
+        contentPadding = PaddingValues(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            // ── Header ───────────────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick  = onBack,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(ColorSurface)
-                ) {
-                    Icon(
-                        imageVector  = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint     = ColorTextPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(16.dp))
-
+        item {
+            Column {
                 Text(
-                    text       = "SETTINGS",
-                    color      = ColorTextPrimary,
-                    fontSize   = 18.sp,
-                    fontWeight = FontWeight.W800,
-                    letterSpacing = 2.sp
+                    text = "Settings",
+                    color = RepLockColors.TextPrimary,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.W800
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Tune sound, reminders, defaults, and daily rep targets for each exercise.",
+                    color = RepLockColors.TextMuted,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
                 )
             }
+        }
 
-            Spacer(Modifier.height(8.dp))
+        item {
+            SettingsSection(title = "Default exercise") {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ExerciseToggle(
+                        exerciseType = ExerciseType.PUSH_UP,
+                        selected = selectedExercise == ExerciseType.PUSH_UP,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onSelectExercise(ExerciseType.PUSH_UP) }
+                    )
+                    ExerciseToggle(
+                        exerciseType = ExerciseType.PULL_UP,
+                        selected = selectedExercise == ExerciseType.PULL_UP,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onSelectExercise(ExerciseType.PULL_UP) }
+                    )
+                }
+            }
+        }
 
-            // ── Reminder Frequency ───────────────────────────────────────────
-            SettingsSection(title = "REMINDERS") {
-                Text(
-                    text      = "How often should we nudge you?",
-                    color     = ColorTextMuted,
-                    fontSize  = 12.sp,
-                    lineHeight = 18.sp,
-                    modifier  = Modifier.padding(bottom = 16.dp)
+        item {
+            SettingsSection(title = "Daily targets") {
+                TargetRow(
+                    exerciseType = ExerciseType.PUSH_UP,
+                    reps = state.pushUpTargetReps,
+                    onDecrease = { onTargetRepsChange(ExerciseType.PUSH_UP, state.pushUpTargetReps - 2) },
+                    onIncrease = { onTargetRepsChange(ExerciseType.PUSH_UP, state.pushUpTargetReps + 2) }
                 )
+                Spacer(Modifier.height(12.dp))
+                TargetRow(
+                    exerciseType = ExerciseType.PULL_UP,
+                    reps = state.pullUpTargetReps,
+                    onDecrease = { onTargetRepsChange(ExerciseType.PULL_UP, state.pullUpTargetReps - 1) },
+                    onIncrease = { onTargetRepsChange(ExerciseType.PULL_UP, state.pullUpTargetReps + 1) }
+                )
+            }
+        }
 
+        item {
+            SettingsSection(title = "Experience") {
                 Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FREQ_OPTIONS.forEach { option ->
-                        FreqChip(
-                            label      = option.label,
-                            isSelected = intervalHours == option.hours,
-                            modifier   = Modifier.weight(1f),
-                            onClick    = {
-                                intervalHours = option.hours
-                                ReminderScheduler.setIntervalHours(context, option.hours)
-                            }
-                        )
-                    }
-                }
-
-                if (intervalHours > 0) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text     = "Active between 7 am – 10 pm",
-                        color    = ColorTextMuted,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // ── Sound ────────────────────────────────────────────────────────
-            SettingsSection(title = "AUDIO") {
-                SoundToggleRow(
-                    label    = "Rep count sound",
-                    subtitle = "A short click plays on each completed rep",
-                    enabled  = soundEnabled,
-                    onToggle = { enabled ->
-                        soundEnabled = enabled
-                        context.setSoundEnabled(enabled)
-                    }
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // ── Change Program ───────────────────────────────────────────────
-            SettingsSection(title = "PROGRAM") {
-                if (canChange) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(ColorAccentPurple, ColorAccentCyan)
-                                )
-                            )
-                            .clickable { onChangeProgram() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text          = "CHANGE PROGRAM",
-                            color         = Color.Black,
-                            fontSize      = 13.sp,
-                            fontWeight    = FontWeight.W800,
-                            letterSpacing = 1.5.sp
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(ColorCard)
-                            .border(1.dp, ColorBorder, RoundedCornerShape(14.dp))
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalAlignment   = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text       = "Program locked",
-                                color      = ColorTextMuted,
-                                fontSize   = 14.sp,
-                                fontWeight = FontWeight.W600
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text     = "Available in $daysLeft day${if (daysLeft == 1) "" else "s"}",
-                                color    = ColorTextMuted.copy(alpha = 0.6f),
-                                fontSize = 11.sp
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(RepLockColors.SurfaceAlt),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = null,
+                                tint = RepLockColors.Teal
                             )
                         }
-                        Icon(
-                            imageVector        = Icons.Default.Lock,
-                            contentDescription = null,
-                            tint               = ColorTextMuted.copy(alpha = 0.5f),
-                            modifier           = Modifier.size(18.dp)
+                        Spacer(Modifier.size(12.dp))
+                        Column {
+                            Text("Rep sound", color = RepLockColors.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.W700)
+                            Text("Play a crisp click for every completed rep.", color = RepLockColors.TextMuted, fontSize = 12.sp)
+                        }
+                    }
+                    Switch(
+                        checked = state.soundEnabled,
+                        onCheckedChange = onSoundEnabledChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = RepLockColors.Teal,
+                            uncheckedThumbColor = RepLockColors.TextMuted,
+                            uncheckedTrackColor = RepLockColors.SurfaceAlt
+                        )
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsSection(title = "Reminders") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Notifications, contentDescription = null, tint = RepLockColors.Orange)
+                    Spacer(Modifier.size(10.dp))
+                    Text(
+                        text = "Nudges run during the daytime window and resume automatically after a reboot.",
+                        color = RepLockColors.TextMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    reminderOptions.forEach { hours ->
+                        ReminderChip(
+                            hours = hours,
+                            selected = state.reminderIntervalHours == hours,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onReminderIntervalChange(hours) }
                         )
                     }
                 }
             }
-
-            Spacer(Modifier.height(40.dp))
         }
     }
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
 @Composable
 private fun SettingsSection(
-    title   : String,
-    content : @Composable ColumnScope.() -> Unit
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text          = title,
-            color         = ColorTextMuted,
-            fontSize      = 10.sp,
-            fontWeight    = FontWeight.W700,
-            letterSpacing = 1.5.sp,
-            modifier      = Modifier.padding(bottom = 12.dp)
+            text = title,
+            color = RepLockColors.TextMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.W700
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(ColorSurface)
+                .clip(RoundedCornerShape(8.dp))
+                .background(RepLockColors.Surface)
+                .border(1.dp, RepLockColors.Stroke, RoundedCornerShape(8.dp))
                 .padding(16.dp),
             content = content
         )
@@ -276,88 +208,101 @@ private fun SettingsSection(
 }
 
 @Composable
-private fun FreqChip(
-    label      : String,
-    isSelected : Boolean,
-    modifier   : Modifier = Modifier,
-    onClick    : () -> Unit
+private fun ExerciseToggle(
+    exerciseType: ExerciseType,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val bgColor by animateColorAsState(
-        targetValue = if (isSelected) ColorAccentPurple.copy(alpha = 0.18f) else ColorCard,
-        animationSpec = tween(200),
-        label = "chip_bg"
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected) ColorAccentPurple else ColorBorder,
-        animationSpec = tween(200),
-        label = "chip_border"
-    )
-    val textColor by animateColorAsState(
-        targetValue = if (isSelected) ColorAccentPurple else ColorTextMuted,
-        animationSpec = tween(200),
-        label = "chip_text"
-    )
+    val accent = exerciseAccent(exerciseType)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) RepLockColors.SurfaceRaised else RepLockColors.SurfaceAlt)
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) accent else RepLockColors.Stroke,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(16.dp)
+    ) {
+        Text(exerciseType.displayName, color = RepLockColors.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.W700)
+        Spacer(Modifier.height(4.dp))
+        Text(exerciseType.setupHint, color = RepLockColors.TextMuted, fontSize = 11.sp, lineHeight = 17.sp)
+    }
+}
 
+@Composable
+private fun TargetRow(
+    exerciseType: ExerciseType,
+    reps: Int,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit
+) {
+    val accent = exerciseAccent(exerciseType)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(exerciseType.displayName, color = RepLockColors.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.W700)
+            Text("Daily rep target", color = RepLockColors.TextMuted, fontSize = 11.sp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StepButton(icon = Icons.Default.Remove, tint = accent, onClick = onDecrease)
+            Text("$reps", color = accent, fontSize = 24.sp, fontWeight = FontWeight.W800)
+            StepButton(icon = Icons.Default.Add, tint = accent, onClick = onIncrease)
+        }
+    }
+}
+
+@Composable
+private fun StepButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(RepLockColors.SurfaceAlt)
+            .border(1.dp, RepLockColors.Stroke, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun ReminderChip(
+    hours: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val label = if (hours == 0) "Off" else "${hours}h"
     Box(
         modifier = modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
+            .height(42.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) RepLockColors.SurfaceRaised else RepLockColors.SurfaceAlt)
             .border(
-                width = if (isSelected) 1.5.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(10.dp)
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) RepLockColors.Orange else RepLockColors.Stroke,
+                shape = RoundedCornerShape(8.dp)
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text       = label,
-            color      = textColor,
-            fontSize   = 11.sp,
-            fontWeight = if (isSelected) FontWeight.W700 else FontWeight.W500,
-            letterSpacing = 0.3.sp
-        )
-    }
-}
-
-@Composable
-private fun SoundToggleRow(
-    label    : String,
-    subtitle : String,
-    enabled  : Boolean,
-    onToggle : (Boolean) -> Unit
-) {
-    Row(
-        modifier              = Modifier.fillMaxWidth(),
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(
-                text       = label,
-                color      = ColorTextPrimary,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.W600
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text     = subtitle,
-                color    = ColorTextMuted,
-                fontSize = 11.sp,
-                lineHeight = 16.sp
-            )
-        }
-
-        Switch(
-            checked         = enabled,
-            onCheckedChange = onToggle,
-            colors          = SwitchDefaults.colors(
-                checkedThumbColor    = Color.White,
-                checkedTrackColor    = ColorAccentPurple,
-                uncheckedThumbColor  = ColorTextMuted,
-                uncheckedTrackColor  = ColorCard
-            )
+            label,
+            color = if (selected) RepLockColors.Orange else RepLockColors.TextMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.W700
         )
     }
 }

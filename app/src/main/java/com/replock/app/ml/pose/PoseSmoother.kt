@@ -24,6 +24,7 @@ class PoseSmoother(private val smoothingFactor: Float = 0.35f) {
         }
 
         return LandmarkFrame(
+            nose = smoothJoint("nos", frame.nose),
             leftShoulder = smoothJoint("lsh", frame.leftShoulder),
             rightShoulder = smoothJoint("rsh", frame.rightShoulder),
             leftElbow = smoothJoint("lel", frame.leftElbow),
