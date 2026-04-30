@@ -173,6 +173,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         analyzer = AnalyzeWorkoutUseCase(exerciseType)
+        val detector = PoseDetector().also { poseDetector = it }
         sessionStartedAt = System.currentTimeMillis()
         formScoreTotal = 0
         formScoreSamples = 0
@@ -190,8 +191,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 todayExerciseReps = todayRepsFor(exerciseType)
             )
         )
-
-        val detector = PoseDetector().also { poseDetector = it }
 
         cameraReadyJob?.cancel()
         cameraReadyJob = viewModelScope.launch {

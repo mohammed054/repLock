@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -95,13 +96,14 @@ fun RepCounterUI(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             // Left: big number
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text          = "REPS COMPLETED",
                     color         = TextMuted,
                     fontSize      = 9.sp,
                     fontWeight    = FontWeight.W600,
-                    letterSpacing = 2.sp
+                    maxLines      = 1,
+                    overflow      = TextOverflow.Clip
                 )
                 Spacer(modifier = Modifier.height(2.dp))
 
@@ -109,18 +111,21 @@ fun RepCounterUI(
                     Text(
                         text         = "$repCount",
                         color        = if (isComplete) AccentGreen else TextPrimary,
-                        fontSize     = (72f * scaleAnim).sp,
+                        fontSize     = (64f * scaleAnim).sp,
                         fontWeight   = FontWeight.W800,
-                        letterSpacing = (-3).sp,
-                        lineHeight   = 76.sp
+                        lineHeight   = 66.sp,
+                        maxLines     = 1,
+                        overflow     = TextOverflow.Clip
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text         = "/ $targetReps",
                         color        = TextMuted,
-                        fontSize     = 20.sp,
+                        fontSize     = 18.sp,
                         fontWeight   = FontWeight.W300,
-                        modifier     = Modifier.padding(bottom = 12.dp)
+                        modifier     = Modifier.padding(bottom = 10.dp),
+                        maxLines     = 1,
+                        overflow     = TextOverflow.Clip
                     )
                 }
 
@@ -129,15 +134,16 @@ fun RepCounterUI(
                     color         = phaseColor(repCount, targetReps),
                     fontSize      = 10.sp,
                     fontWeight    = FontWeight.W600,
-                    letterSpacing = 1.5.sp
+                    maxLines      = 1,
+                    overflow      = TextOverflow.Ellipsis
                 )
             }
 
-            Spacer(modifier = Modifier.width(20.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             // Right: arc ring
             Box(
-                modifier        = Modifier.size(88.dp),
+                modifier        = Modifier.size(76.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -186,12 +192,14 @@ fun RepCounterUI(
                     color         = if (isComplete) AccentGreen else TextPrimary,
                     fontSize      = 15.sp,
                     fontWeight    = FontWeight.W700,
-                    textAlign     = TextAlign.Center
+                    textAlign     = TextAlign.Center,
+                    maxLines      = 1,
+                    overflow      = TextOverflow.Clip
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // ── Pip row: milestone markers ──────────────────────────────────────
         val milestones = 5
@@ -221,7 +229,8 @@ fun RepCounterUI(
                         color         = if (reached) AccentCyan else TextMuted.copy(alpha = 0.5f),
                         fontSize      = 8.sp,
                         fontWeight    = if (reached) FontWeight.W700 else FontWeight.W400,
-                        letterSpacing = 0.5.sp
+                        maxLines      = 1,
+                        overflow      = TextOverflow.Clip
                     )
                 }
             }

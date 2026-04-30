@@ -1,5 +1,6 @@
 package com.replock.app.presentation.components
 
+import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -91,20 +93,27 @@ fun CameraPreview(
 
     Box(
         modifier = modifier
-            .background(BgSurface, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
+            .background(BgSurface, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
     ) {
         // Phase 4.4: Three states:
         //   !isActive             → "TAP START TO ACTIVATE" placeholder
         //   isActive && !ready    → camera warming up (spinner)
         //   isActive && ready     → live camera feed
         when {
-            !isActive       -> PlaceholderGrid(modifier = Modifier.fillMaxSize())
-            !isCameraReady  -> CameraWarmingState(modifier = Modifier.fillMaxSize())
-            else            -> LiveCameraFeed(
+            !isActive -> PlaceholderGrid(modifier = Modifier.fillMaxSize())
+            else -> LiveCameraFeed(
                 modifier             = Modifier.fillMaxSize(),
                 imageAnalysisUseCase = imageAnalysisUseCase,
                 cameraFacing         = cameraFacing
+            )
+        }
+
+        if (isActive && !isCameraReady) {
+            CameraWarmingState(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BgSurface.copy(alpha = 0.46f))
             )
         }
 
@@ -169,7 +178,12 @@ fun CameraPreview(
             CameraControlBtn(Icons.Default.Cameraswitch, "FLIP", onFlipCamera, AccentCyan)
         }
 
-        // Live / Standby badge (top-right)
+        // Camera state badge (top-right)
+        val cameraStatusColor = when {
+            !isActive -> TextMuted
+            isCameraReady -> AccentGreen
+            else -> AccentAmber
+        }
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -184,17 +198,22 @@ fun CameraPreview(
                     .size(6.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isActive) AccentGreen.copy(alpha = dotAlpha)
+                        if (isActive) cameraStatusColor.copy(alpha = dotAlpha)
                         else TextMuted.copy(alpha = 0.6f)
                     )
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text          = if (isActive) "LIVE" else "STANDBY",
-                color         = if (isActive) AccentGreen else TextMuted,
+                text          = when {
+                    !isActive -> "OFF"
+                    isCameraReady -> "LIVE"
+                    else -> "WARM"
+                },
+                color         = cameraStatusColor,
                 fontSize      = 9.sp,
                 fontWeight    = FontWeight.W700,
-                letterSpacing = 1.5.sp
+                maxLines      = 1,
+                overflow      = TextOverflow.Clip
             )
         }
 
@@ -203,7 +222,7 @@ fun CameraPreview(
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(12.dp)
+                    .padding(start = 12.dp, bottom = 78.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color.Black.copy(alpha = 0.65f))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -217,11 +236,12 @@ fun CameraPreview(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text          = "POSE DETECTION  ·  $repState",
+                    text          = "POSE $repState",
                     color         = AccentCyan.copy(alpha = 0.9f),
                     fontSize      = 9.sp,
                     fontWeight    = FontWeight.W500,
-                    letterSpacing = 1.sp
+                    maxLines      = 1,
+                    overflow      = TextOverflow.Ellipsis
                 )
             }
         }
@@ -238,11 +258,12 @@ fun CameraPreview(
         }
 
         // ── Feedback Banner ───────────────────────────────────────────────────
-        if (isActive && feedback.isNotEmpty()) {
+        if (isActive && isCameraReady && feedback.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 60.dp)
+                    .fillMaxWidth()
+                    .padding(top = 58.dp, start = 14.dp, end = 14.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(
                         if (isFormValid) AccentGreen.copy(alpha = 0.9f)
@@ -254,7 +275,10 @@ fun CameraPreview(
                     text       = feedback,
                     color      = if (isFormValid) Color.Black else Color.White,
                     fontSize   = 14.sp,
-                    fontWeight = FontWeight.Bold
+                    lineHeight  = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines   = 2,
+                    overflow   = TextOverflow.Ellipsis
                 )
             }
         }
@@ -420,7 +444,11 @@ private fun LiveCameraFeed(
 ) {
     val context        = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView    = remember { PreviewView(context) }
+    val previewView    = remember {
+        PreviewView(context).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+    }
 
     LaunchedEffect(imageAnalysisUseCase, cameraFacing) {
         val provider = ProcessCameraProvider.getInstance(context).get()
@@ -428,25 +456,44 @@ private fun LiveCameraFeed(
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
         provider.unbindAll()
-        if (imageAnalysisUseCase != null) {
-            provider.bindToLifecycle(
-                lifecycleOwner,
-                cameraFacing,
-                preview,
-                imageAnalysisUseCase
-            )
+        val fallbackCamera = if (cameraFacing == CameraSelector.DEFAULT_BACK_CAMERA) {
+            CameraSelector.DEFAULT_FRONT_CAMERA
         } else {
-            provider.bindToLifecycle(
-                lifecycleOwner,
-                cameraFacing,
-                preview
-            )
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+        val selectedCamera = if (runCatching { provider.hasCamera(cameraFacing) }.getOrDefault(false)) {
+            cameraFacing
+        } else {
+            fallbackCamera
+        }
+
+        fun bindUseCases(selector: CameraSelector) {
+            if (imageAnalysisUseCase != null) {
+                provider.bindToLifecycle(
+                    lifecycleOwner,
+                    selector,
+                    preview,
+                    imageAnalysisUseCase
+                )
+            } else {
+                provider.bindToLifecycle(
+                    lifecycleOwner,
+                    selector,
+                    preview
+                )
+            }
+        }
+
+        runCatching {
+            bindUseCases(selectedCamera)
+        }.onFailure {
+            Log.e("CameraPreview", "Unable to bind camera", it)
         }
     }
 
     AndroidView(
         factory  = { previewView },
-        modifier = modifier.clip(RoundedCornerShape(20.dp))
+        modifier = modifier.clip(RoundedCornerShape(8.dp))
     )
 }
 
@@ -542,7 +589,8 @@ private fun CameraWarmingState(modifier: Modifier) {
                 color         = TextMuted.copy(alpha = 0.4f),
                 fontSize      = 9.sp,
                 fontWeight    = FontWeight.W500,
-                letterSpacing = 2.sp
+                maxLines      = 1,
+                overflow      = TextOverflow.Clip
             )
         }
     }
@@ -598,7 +646,8 @@ private fun PlaceholderGrid(modifier: Modifier) {
                 color         = TextMuted.copy(alpha = 0.22f),
                 fontSize      = 9.sp,
                 fontWeight    = FontWeight.W500,
-                letterSpacing = 2.sp
+                maxLines      = 1,
+                overflow      = TextOverflow.Clip
             )
         }
     }

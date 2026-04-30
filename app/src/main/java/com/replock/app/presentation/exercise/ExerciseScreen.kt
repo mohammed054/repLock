@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.replock.app.domain.model.ExerciseType
@@ -64,6 +64,7 @@ fun ExerciseScreen(
 ) {
     BackHandler(onBack = onFinish)
     val accent = exerciseAccent(exerciseType)
+    val coachingText = if (isPoseDetected && feedback.isNotBlank()) feedback else exerciseType.coachingHint
 
     Box(
         modifier = Modifier
@@ -73,57 +74,53 @@ fun ExerciseScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 18.dp, vertical = 18.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onFinish,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(RepLockColors.Surface)
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = RepLockColors.TextPrimary)
-                    }
-                    Spacer(Modifier.size(12.dp))
-                    Column {
-                        Text(exerciseType.displayName, color = RepLockColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.W800)
-                        Text(
-                            text = if (isPoseDetected) feedback else exerciseType.setupHint,
-                            color = RepLockColors.TextMuted,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp
-                        )
-                    }
+                IconButton(
+                    onClick = onFinish,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(RepLockColors.Surface)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = RepLockColors.TextPrimary)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    IconButton(
-                        onClick = onFlipCamera,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(RepLockColors.Surface)
-                    ) {
-                        Icon(Icons.Default.Cameraswitch, contentDescription = "Flip", tint = accent)
-                    }
-                    IconButton(
-                        onClick = onFinish,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(RepLockColors.Surface)
-                    ) {
-                        Icon(Icons.Default.StopCircle, contentDescription = "Finish", tint = RepLockColors.Coral)
-                    }
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = exerciseType.displayName,
+                        color = RepLockColors.TextPrimary,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.W800,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = if (isPoseDetected && feedback.isNotBlank()) feedback else exerciseType.setupHint,
+                        color = RepLockColors.TextMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.size(10.dp))
+                IconButton(
+                    onClick = onFinish,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(RepLockColors.Surface)
+                ) {
+                    Icon(Icons.Default.StopCircle, contentDescription = "Finish", tint = RepLockColors.Coral)
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             Box(
                 modifier = Modifier
@@ -140,7 +137,7 @@ fun ExerciseScreen(
                     imageAnalysisUseCase = imageAnalysisUseCase,
                     currentFrame = currentFrame,
                     isFormValid = isFormValid,
-                    feedback = feedback,
+                    feedback = if (isPoseDetected) feedback else "",
                     frameWidth = frameWidth,
                     frameHeight = frameHeight,
                     isDebugMode = false,
@@ -153,8 +150,8 @@ fun ExerciseScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     LiveMetric(label = "Form", value = "$formScore", tint = if (isFormValid) RepLockColors.Lime else RepLockColors.Orange, modifier = Modifier.weight(1f))
                     LiveMetric(label = "Timer", value = MainViewModel.formatDuration(elapsedSecs), tint = RepLockColors.Sky, modifier = Modifier.weight(1f))
@@ -162,7 +159,7 @@ fun ExerciseScreen(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             Column(
                 modifier = Modifier
@@ -170,46 +167,42 @@ fun ExerciseScreen(
                     .clip(RoundedCornerShape(8.dp))
                     .background(RepLockColors.Surface)
                     .border(1.dp, RepLockColors.Stroke, RoundedCornerShape(8.dp))
-                    .padding(18.dp)
+                    .padding(14.dp)
             ) {
                 RepCounterUI(
                     repCount = repCount,
                     targetReps = targetReps,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatusTile("Best", "$personalBest", accent, Modifier.weight(1f))
                     StatusTile("State", repState.replace('_', ' '), RepLockColors.TextPrimary, Modifier.weight(1f))
                     StatusTile(
                         "Camera",
-                        if (isCameraReady) "live" else "warming",
+                        if (isCameraReady) "LIVE" else "WARM",
                         if (isCameraReady) RepLockColors.Teal else RepLockColors.TextMuted,
                         Modifier.weight(1f)
                     )
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(RepLockColors.SurfaceAlt)
-                        .padding(14.dp)
+                        .padding(12.dp)
                 ) {
                     Text("Coaching", color = RepLockColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.W700)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = if (isPoseDetected) feedback else exerciseType.coachingHint,
+                        text = coachingText,
                         color = RepLockColors.TextPrimary,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.W600
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = exerciseType.coachingHint,
-                        color = RepLockColors.TextMuted,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.W600,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -228,11 +221,11 @@ private fun LiveMetric(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(Color.Black.copy(alpha = 0.55f))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        Text(label, color = RepLockColors.TextMuted, fontSize = 10.sp)
+        Text(label, color = RepLockColors.TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(4.dp))
-        Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.W800)
+        Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.W800, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -247,10 +240,10 @@ private fun StatusTile(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(RepLockColors.SurfaceAlt)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        Text(label, color = RepLockColors.TextMuted, fontSize = 10.sp)
+        Text(label, color = RepLockColors.TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(4.dp))
-        Text(value, color = tint, fontSize = 15.sp, fontWeight = FontWeight.W700)
+        Text(value, color = tint, fontSize = 15.sp, fontWeight = FontWeight.W700, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
